@@ -1,0 +1,99 @@
+# Company career boards Co-op Coach checks directly (on top of SimplifyJobs, LinkedIn and Indeed).
+# Each entry was verified to respond on 2026-10-05. Add more from the UI (Settings → Job sources) by pasting a
+# careers URL, or here. tier: bigtech | quant | finance | startup | yc | other
+
+greenhouse:
+  - { slug: stripe, name: Stripe, tier: bigtech }
+  - { slug: databricks, name: Databricks, tier: bigtech }
+  - { slug: robinhood, name: Robinhood, tier: bigtech }
+  - { slug: coinbase, name: Coinbase, tier: bigtech }
+  - { slug: figma, name: Figma, tier: bigtech }
+  - { slug: airbnb, name: Airbnb, tier: bigtech }
+  - { slug: cloudflare, name: Cloudflare, tier: bigtech }
+  - { slug: datadog, name: Datadog, tier: bigtech }
+  - { slug: anthropic, name: Anthropic, tier: bigtech }
+  - { slug: pinterest, name: Pinterest, tier: bigtech }
+  - { slug: reddit, name: Reddit, tier: bigtech }
+  - { slug: lyft, name: Lyft, tier: bigtech }
+  - { slug: instacart, name: Instacart, tier: bigtech }
+  - { slug: roblox, name: Roblox, tier: bigtech }
+  - { slug: mongodb, name: MongoDB, tier: bigtech }
+  - { slug: spacex, name: SpaceX, tier: bigtech }
+  - { slug: waymo, name: Waymo, tier: bigtech }
+  - { slug: gitlab, name: GitLab, tier: bigtech }
+  - { slug: duolingo, name: Duolingo, tier: bigtech }
+  - { slug: scaleai, name: Scale AI, tier: startup }
+  - { slug: vercel, name: Vercel, tier: startup }
+  - { slug: samsara, name: Samsara, tier: startup }
+  - { slug: affirm, name: Affirm, tier: startup }
+  - { slug: toast, name: Toast, tier: startup }
+  - { slug: verkada, name: Verkada, tier: startup }
+  - { slug: neuralink, name: Neuralink, tier: startup }
+  - { slug: nuro, name: Nuro, tier: startup }
+  - { slug: squarespace, name: Squarespace, tier: other }
+  - { slug: point72, name: Point72, tier: quant }
+  - { slug: imc, name: IMC Trading, tier: quant }
+  - { slug: janestreet, name: Jane Street, tier: quant }
+  - { slug: towerresearchcapital, name: Tower Research Capital, tier: quant }
+  - { slug: virtu, name: Virtu Financial, tier: quant }
+
+lever:
+  - { slug: palantir, name: Palantir, tier: bigtech }
+  - { slug: spotify, name: Spotify, tier: bigtech }
+  - { slug: shieldai, name: Shield AI, tier: startup }
+
+ashby:
+  - { slug: openai, name: OpenAI, tier: bigtech }
+  - { slug: snowflake, name: Snowflake, tier: bigtech }
+  - { slug: ramp, name: Ramp, tier: startup }
+  - { slug: notion, name: Notion, tier: startup }
+  - { slug: cohere, name: Cohere, tier: startup }
+  - { slug: wealthsimple, name: Wealthsimple, tier: startup }
+  - { slug: perplexity, name: Perplexity, tier: startup }
+  - { slug: vanta, name: Vanta, tier: startup }
+  - { slug: harvey, name: Harvey, tier: startup }
+  - { slug: sierra, name: Sierra, tier: startup }
+  - { slug: elevenlabs, name: ElevenLabs, tier: startup }
+  - { slug: modal, name: Modal, tier: startup }
+  - { slug: linear, name: Linear, tier: startup }
+  - { slug: replit, name: Replit, tier: startup }
+  - { slug: supabase, name: Supabase, tier: startup }
+  - { slug: 1password, name: 1Password, tier: startup }
+  - { slug: cursor, name: Cursor, tier: startup }
+
+# SAP SuccessFactors career sites (public RSS feed). slug = the site's host name.
+successfactors:
+  - { slug: careers.ey.com, name: EY, tier: finance }
+  - { slug: careers.deloitte.ca, name: Deloitte Canada, tier: finance }
+  - { slug: jobs.scotiabank.com, name: Scotiabank, tier: finance }
+  - { slug: careers.bombardier.com, name: Bombardier, tier: finance }
+
+# Jibe (iCIMS) career sites (public JSON API). slug = the site's host name.
+jibe:
+  - { slug: careers.kpmg.ca, name: KPMG Canada, tier: finance }
+
+# Workday: url is the public careers site (https://<tenant>.wd<N>.myworkdayjobs.com/<site>)
+workday:
+  - { url: "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1", name: RBC, tier: finance }
+  - { url: "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers", name: TD, tier: finance }
+  - { url: "https://cibc.wd3.myworkdayjobs.com/search", name: CIBC, tier: finance }
+  - { url: "https://bmo.wd3.myworkdayjobs.com/External", name: BMO, tier: finance }
+  - { url: "https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs", name: Manulife, tier: finance }
+  - { url: "https://sunlife.wd3.myworkdayjobs.com/Experienced-Jobs", name: Sun Life, tier: finance }
+  - { url: "https://omers.wd3.myworkdayjobs.com/OMERS_External", name: OMERS, tier: finance }
+  - { url: "https://capitalone.wd12.myworkdayjobs.com/Capital_One", name: Capital One, tier: finance }
+  - { url: "https://ms.wd5.myworkdayjobs.com/External", name: Morgan Stanley, tier: finance }
+  - { url: "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional", name: BlackRock, tier: finance }
+  - { url: "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers", name: Mastercard, tier: finance }
+  - { url: "https://paypal.wd1.myworkdayjobs.com/jobs", name: PayPal, tier: bigtech }
+  - { url: "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite", name: NVIDIA, tier: bigtech }
+  - { url: "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site", name: Salesforce, tier: bigtech }
+  - { url: "https://adobe.wd5.myworkdayjobs.com/external_experienced", name: Adobe, tier: bigtech }
+  - { url: "https://intel.wd1.myworkdayjobs.com/External", name: Intel, tier: bigtech }
+  - { url: "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers", name: Cisco, tier: bigtech }
+  - { url: "https://workday.wd5.myworkdayjobs.com/Workday", name: Workday, tier: bigtech }
+  - { url: "https://thomsonreuters.wd5.myworkdayjobs.com/External_Career_Site", name: Thomson Reuters, tier: bigtech }
+  - { url: "https://ciena.wd5.myworkdayjobs.com/Careers", name: Ciena, tier: bigtech }
+  - { url: "https://pwc.wd3.myworkdayjobs.com/Global_Campus_Careers", name: PwC, tier: finance }
+  - { url: "https://pwc.wd3.myworkdayjobs.com/US_Entry_Level_Careers", name: PwC, tier: finance }
+  - { url: "https://spgi.wd5.myworkdayjobs.com/SPGI_Careers", name: S&P Global, tier: finance }

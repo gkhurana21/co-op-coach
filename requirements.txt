@@ -1,0 +1,19 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27
+pypdf>=5.0
+python-docx>=1.1
+beautifulsoup4>=4.12
+APScheduler>=3.10,<4
+PyYAML>=6.0
+python-multipart>=0.0.9
+anthropic>=1.11
+# Optional: Indeed (and Glassdoor/Google Jobs) via JobSpy. Remove if you don't want it.
+python-jobspy>=1.1.80
+keyring>=25
+# Optional: Workday status checks + PDF export drive your installed Chrome
+playwright>=1.45
+mcp>=2.3
+# Optional: keep your data in your own Supabase project (Postgres)
+psycopg[binary]>=3.2
+psycopg-pool>=3.2

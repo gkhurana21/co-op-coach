@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Linux runners have no Keychain: a throwaway file keyring for the suites that save test passwords
+      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Dictionary for the resume proofreader
+        run: sudo apt-get update -q && sudo apt-get install -y -q wamerican
+      - name: Install
+        run: |
+          pip install -r requirements.txt ruff keyrings.alt
+          python -m playwright install --with-deps chromium
+      - name: Lint (pyflakes + import order)
+        run: ruff check --select F,I coopcoach tools tests
+      - name: Every test suite
+        run: python -m tests.run_all

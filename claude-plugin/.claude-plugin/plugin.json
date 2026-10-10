@@ -1,0 +1,7 @@
+{
+  "name": "coop-coach",
+  "version": "1.0.0",
+  "description": "Your Co-op Coach job hunt inside Claude Code: daily autopilot, applications prepared and filled (you press Submit), follow-ups, interview prep and events.",
+  "author": { "name": "Co-op Coach" },
+  "keywords": ["internships", "co-op", "job search", "applications"]
+}

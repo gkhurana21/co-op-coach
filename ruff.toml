@@ -1,0 +1,3 @@
+# ruff check --select F,I coopcoach tools tests   (CI runs this: pyflakes + import order)
+line-length = 120
+target-version = "py310"

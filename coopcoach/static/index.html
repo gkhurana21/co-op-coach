@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Co-op Coach</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><path d='M9 13h14v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z' fill='white'/><path d='M13 13v-2a3 3 0 0 1 6 0v2' stroke='white' stroke-width='2' fill='none'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script>try { if (localStorage.getItem("cc.theme") === '"light"') document.documentElement.dataset.theme = "light"; } catch (e) { /* private mode */ }</script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M9 13h14v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z" fill="white"/><path d="M13 13v-2a3 3 0 0 1 6 0v2" stroke="white" stroke-width="2" fill="none"/></svg>
+        </span>
+        <span class="brand-name">Co-op Coach</span>
+      </div>
+      <div id="profiles" class="profiles"></div>
+      <button id="app-pill" class="app-pill hidden" title="Your application stats"></button>
+      <div class="sync">
+        <span id="sync-status" class="muted small"></span>
+        <button id="theme-btn" class="btn btn-ghost btn-sm" title="Switch between black and light">☀︎</button>
+        <button id="lock-btn" class="btn btn-ghost btn-sm hidden" title="Lock this profile">🔒 Lock</button>
+        <button id="sync-btn" class="btn btn-ghost btn-sm" title="Pull new postings now">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          Sync
+        </button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="autopilot" class="active">Autopilot <span class="count" id="ready-count"></span></button>
+      <button data-tab="matches">Matches</button>
+      <button data-tab="tracker">Applications <span class="count" id="app-count"></span></button>
+      <button data-tab="documents">Documents</button>
+      <button data-tab="events">Events</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main id="main"></main>
+
+  <div id="modal-root"></div>
+  <button id="chat-fab" class="chat-fab hidden" title="Ask Co-op Coach" aria-label="Open chat">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01" stroke-linecap="round" stroke-width="3"/></svg>
+    <span class="chat-dot hidden" id="chat-dot"></span>
+  </button>
+  <section id="chat-panel" class="chat-panel hidden" aria-label="Co-op Coach chat">
+    <header><div><b>Co-op Coach</b><div class="muted small" id="chat-mode"></div></div><button class="icon-btn" id="chat-close" aria-label="Close chat">✕</button></header>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="chat-suggest" id="chat-suggest"></div>
+    <form id="chat-form"><textarea id="chat-input" rows="1" placeholder="Ask anything, or paste a recruiter email…" autocomplete="off"></textarea><button class="btn btn-sm">Send</button></form>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/docs.js"></script>
+  <script src="/static/autopilot.js"></script>
+  <script src="/static/settings.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

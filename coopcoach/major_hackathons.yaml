@@ -1,0 +1,46 @@
+# Well-known student hackathons in Canada and the US. "when" is when each usually happens (taken from MLH's season
+# listings where they have it); the Events tab shows the real dates, with a link to save them, as soon as MLH or Devpost
+# lists this season's edition. Every site was checked live by tools/discover_event_sources.py --check.
+hackathons:
+  # Canada
+  - {name: Hack the North, city: Waterloo, region: Waterloo Region, country: CA, when: September, site: "https://hackthenorth.com/"}
+  - {name: UofTHacks, city: Toronto, region: Toronto / GTA, country: CA, when: January, site: "https://uofthacks.com/"}
+  - {name: DeltaHacks, city: Hamilton, region: Hamilton, country: CA, when: January, site: "https://www.deltahacks.com/"}
+  - {name: Hack Western, city: "London, ON", region: London ON, country: CA, when: November, site: "https://hackwestern.com/"}
+  - {name: nwHacks, city: Vancouver, region: Vancouver, country: CA, when: January, site: "https://nwhacks.io/"}
+  - {name: McHacks, city: Montréal, region: Montréal, country: CA, when: January–February, site: "https://www.mchacks.ca/"}
+  - {name: ConUHacks, city: Montréal, region: Montréal, country: CA, when: January, site: "https://conuhacks.io/"}
+  - {name: QHacks, city: Kingston, region: Kingston, country: CA, when: January–February, site: "https://qhacks.io/"}
+  - {name: uOttaHack, city: Ottawa, region: Ottawa, country: CA, when: January, site: "https://uottahack.ca/"}
+  - {name: Hack the Hill, city: Ottawa, region: Ottawa, country: CA, when: September, site: "https://hackthehill.com/"}
+  - {name: Hack the Valley, city: Toronto (Scarborough), region: Toronto / GTA, country: CA, when: October, site: "https://hackthevalley.io/"}
+  - {name: Hack the 6ix, city: Toronto, region: Toronto / GTA, country: CA, when: July, site: "https://hackthe6ix.com/"}
+  - {name: MakeUofT, city: Toronto, region: Toronto / GTA, country: CA, when: February, site: "https://makeuoft.ca/"}
+  - {name: ElleHacks, city: Toronto, region: Toronto / GTA, country: CA, when: January–February, site: "https://ellehacks.com/"}
+  - {name: StormHacks, city: Burnaby, region: Vancouver, country: CA, when: October, site: "https://www.stormhacks.com/"}
+  # United States
+  - {name: HackMIT, city: "Cambridge, MA", region: Boston, country: US, when: September, site: "https://hackmit.org/"}
+  - {name: HackHarvard, city: "Cambridge, MA", region: Boston, country: US, when: October, site: "https://hackharvard.io/"}
+  - {name: TreeHacks, city: Stanford, region: SF Bay Area, country: US, when: February, site: "https://www.treehacks.com/"}
+  - {name: Cal Hacks, city: San Francisco, region: SF Bay Area, country: US, when: October, site: "https://calhacks.io/"}
+  - {name: PennApps, city: Philadelphia, region: Philadelphia, country: US, when: September, site: "https://pennapps.com/"}
+  - {name: HackPrinceton, city: Princeton, region: Princeton / NJ, country: US, when: November and April, site: "https://www.hackprinceton.com/"}
+  - {name: HackRU, city: "New Brunswick, NJ", region: Princeton / NJ, country: US, when: October, site: "https://www.hackru.org/"}
+  - {name: HackGT, city: Atlanta, region: Atlanta, country: US, when: September, site: "https://hack.gt/"}
+  - {name: MHacks, city: Ann Arbor, region: Ann Arbor, country: US, when: October, site: "https://www.mhacks.org/"}
+  - {name: HackIllinois, city: Urbana-Champaign, region: Champaign, country: US, when: February, site: "https://www.hackillinois.org/"}
+  - {name: TartanHacks, city: Pittsburgh, region: Pittsburgh, country: US, when: February, site: "https://tartanhacks.com/"}
+  - {name: BigRed//Hacks, aka: [Big Red Hacks], city: Ithaca, region: Ithaca, country: US, when: October, site: "https://www.bigredhacks.com/"}
+  - {name: Hack@Brown, aka: [Hack at Brown], city: Providence, region: Providence, country: US, when: February, site: "https://hackatbrown.org/"}
+  - {name: HackUMass, city: "Amherst, MA", region: Amherst, country: US, when: November, site: "https://www.hackumass.com/"}
+  - {name: Bitcamp, city: College Park, region: Washington DC, country: US, when: April, site: "https://bit.camp/"}
+  - {name: Technica, city: College Park, region: Washington DC, country: US, when: October, site: "https://gotechnica.org/"}
+  - {name: HackDuke, city: "Durham, NC", region: Research Triangle, country: US, when: Fall, site: "https://hackduke.org/"}
+  - {name: HackTX, city: Austin, region: Austin, country: US, when: October, site: "https://hacktx.com/"}
+  - {name: HackRice, city: Houston, region: Houston, country: US, when: Fall, site: "https://hackrice.com/"}
+  - {name: HackUTD, city: Dallas, region: Dallas, country: US, when: November, site: "https://hackutd.co/"}
+  - {name: MadHacks, city: Madison, region: Madison, country: US, when: Fall, site: "https://www.madhacks.io/"}
+  - {name: DubHacks, city: Seattle, region: Seattle, country: US, when: October, site: "https://dubhacks.co/"}
+  - {name: LA Hacks, city: Los Angeles, region: Los Angeles, country: US, when: April, site: "https://lahacks.com/"}
+  - {name: Hacktech, city: Pasadena, region: Los Angeles, country: US, when: April, site: "https://hack.caltech.edu/"}
+  - {name: HackDavis, city: Davis, region: Other US, country: US, when: May, site: "https://hackdavis.io/"}

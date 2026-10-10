@@ -1,0 +1,79 @@
+# Co-op Coach configuration. Restart the server after editing.
+
+sync:
+  interval_hours: 3          # how often to pull new postings while the server runs
+  run_on_startup: true       # sync right away if the last sync is older than interval_hours
+
+sources:
+  simplify:
+    enabled: true            # SimplifyJobs community list (thousands of internships, updated hourly)
+    repos:
+      - SimplifyJobs/Summer2027-Internships
+  greenhouse: { enabled: true }   # company boards listed in coopcoach/seed_companies.yaml
+  lever:      { enabled: true }
+  ashby:      { enabled: true }
+  workday:    { enabled: true, max_per_company: 120 }
+  linkedin:
+    enabled: true            # public guest search; kept small + slow to be polite
+    past_days: 7
+    pages_per_query: 2
+    queries:
+      - { keywords: "software intern", location: "Canada" }
+      - { keywords: "software co-op", location: "Canada" }
+      - { keywords: "data science intern", location: "Canada" }
+      - { keywords: "machine learning intern", location: "Canada" }
+      - { keywords: "quant intern", location: "Canada" }
+      - { keywords: "software engineer intern", location: "United States" }
+      - { keywords: "machine learning intern", location: "United States" }
+      - { keywords: "quantitative trading intern", location: "United States" }
+  indeed:
+    enabled: true            # needs the optional python-jobspy package
+    past_days: 7
+    results_per_query: 40
+    queries:
+      - { keywords: "software intern", location: "Toronto, ON", country: "Canada" }
+      - { keywords: "co-op software", location: "Canada", country: "Canada" }
+      - { keywords: "data intern", location: "Canada", country: "Canada" }
+      - { keywords: "engineering co-op", location: "Waterloo, ON", country: "Canada" }
+      - { keywords: "software engineer intern", location: "United States", country: "USA" }
+
+ai:
+  # provider: auto | groq | claude | none
+  #   groq   = free (GROQ_API_KEY from console.groq.com/keys). Your name/email/phone/links are redacted first.
+  #   claude = best quality, paid (ANTHROPIC_API_KEY or an `ant auth login` profile).
+  #   auto   = Claude if configured, otherwise Groq, otherwise the built-in rules.
+  provider: auto
+  groq_model: openai/gpt-oss-120b
+  groq_max_jobs_scored_per_sync: 18   # free tier is ~200k tokens/day; keeps scoring well inside it
+  model: claude-opus-5-5
+  max_jobs_scored_per_sync: 60        # per profile with Claude; only the most promising new postings are sent
+  # "Use my Claude Code for all AI" (Autopilot tab) runs the `claude` command on your Claude plan instead.
+  claude_code_model: ""               # "" = your Claude Code default; or opus / sonnet / a full model name
+  claude_code_fast_model: sonnet      # bulk work: match scoring, inbox sorting
+  claude_code_max_jobs_scored_per_sync: 60
+  claude_code_pause_minutes: 30       # after a usage-limit message, use Groq for this long
+  terminal_ticket_hours: 4            # how long "Apply with my Claude Code" in Terminal can use your profile
+
+email:
+  # Connected inboxes (Applications tab) are checked on every sync for application confirmations,
+  # online assessments, interview invites, offers and rejections.
+  lookback_days: 120         # how far back the first scan goes
+  use_ai: false              # true = let the AI provider classify recruiting emails (sends subject + first part of
+                             # the body); false = built-in rules, nothing leaves your machine
+  # Outlook / Hotmail / school Microsoft 365 sign-in: the Application (client) ID of your one-time Microsoft app
+  # registration (steps in the app under Applications → Connect an inbox → Outlook). Not a secret, so it's fine to
+  # keep here and share with your friend through the private repo.
+  microsoft_client_id: ""
+
+notifications:
+  min_score: 60              # only ping for new postings at or above this match score (favourites always ping)
+  max_items: 10              # postings per digest
+  macos: true                # desktop notification when the server runs on a Mac
+  # Optional email digests: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM in .env
+
+# US companies you know take Canadian co-op students (adds a "Often hires Canadian co-ops" boost).
+# The big tech and trading firms are built in; add startups you hear about here.
+us_friendly: []
+
+security:
+  auto_lock_minutes: 30      # re-lock a person after this much inactivity

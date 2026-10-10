@@ -1,0 +1,45 @@
+# Event sources added for everyone: universities (career, recruiting, startup and hackathon events only) and Toronto /
+# Waterloo organizers. Each one answered with upcoming events when tools/discover_event_sources.py --check last ran.
+# Localist URLs carry the school's own career / entrepreneurship event-type ids, so they return just those events; the
+# others are filtered by keywords (events.CAMPUS_RE) and never list things aimed at staff, alumni or applicants.
+#
+# Schools not here (UofT's main calendar, Queen's, McMaster, York, Carleton, TMU, uOttawa, McGill, Concordia, Alberta,
+# Columbia, Penn, Princeton, Georgia Tech, UIUC, Michigan, UCLA...) don't publish a calendar feed that can be read
+# without signing in, and UBC turns automated readers away. Add any calendar link yourself in Settings → Sources.
+sources:
+  # Canadian universities
+  - {name: UofT Engineering, group: Canadian universities, region: Toronto / GTA, url: "https://www.engineering.utoronto.ca/engineering-events/list/?ical=1"}
+  - {name: Western, group: Canadian universities, region: London ON, url: "https://www.uwo.ca/events/_data/current.ics"}
+  - {name: Laurier, group: Canadian universities, region: Waterloo Region, url: "https://events.wlu.ca/_data/current.ics"}
+  - {name: Ontario Tech, group: Canadian universities, region: Toronto / GTA, url: "https://events.ontariotechu.ca/_data/current.ics"}
+  - {name: SFU, group: Canadian universities, region: Vancouver, url: "https://events.sfu.ca/live/json/events/max/400"}
+  - {name: UVic, group: Canadian universities, region: Victoria, url: "https://events.uvic.ca/live/json/events/max/400"}
+  - {name: UCalgary, group: Canadian universities, region: Calgary / Edmonton, url: "https://events.ucalgary.ca/live/json/events/max/400"}
+  - {name: Dalhousie, group: Canadian universities, region: Halifax, url: "https://events.dal.ca/live/json/events/max/400"}
+  # US universities
+  - {name: Stanford, group: US universities, region: SF Bay Area, url: "https://events.stanford.edu/api/2/events?type[]=37952873725453"}
+  - {name: Berkeley, group: US universities, region: SF Bay Area, url: "https://events.berkeley.edu/live/json/events/max/400"}
+  - {name: MIT, group: US universities, region: Boston, url: "https://calendar.mit.edu/api/2/events?type[]=106275&type[]=102753&type[]=109265"}
+  - {name: Harvard, group: US universities, region: Boston, url: "https://www.trumba.com/calendars/gazette.ics"}
+  - {name: Northeastern, group: US universities, region: Boston, url: "https://events.northeastern.edu/api/2/events"}
+  - {name: Brown, group: US universities, region: Providence, url: "https://events.brown.edu/live/json/events/max/400"}
+  - {name: Yale, group: US universities, region: New Haven, url: "https://events.yale.edu/api/2/events?type[]=46181231340272&type[]=46181231338223"}
+  - {name: Cornell, group: US universities, region: Ithaca, url: "https://events.cornell.edu/api/2/events?type[]=4434&type[]=4432&type[]=17608&type[]=96802"}
+  - {name: NYU, group: US universities, region: New York, url: "https://events.nyu.edu/live/json/events/max/400"}
+  - {name: CMU, group: US universities, region: Pittsburgh, url: "https://events.cmu.edu/live/json/events/max/400"}
+  - {name: Duke, group: US universities, region: Research Triangle, url: "https://calendar.duke.edu/events/index.ics"}
+  - {name: UNC, group: US universities, region: Research Triangle, url: "https://calendar.unc.edu/api/2/events?type[]=43092631620521&type[]=43092631629740"}
+  - {name: UChicago, group: US universities, region: Chicago, url: "https://events.uchicago.edu/live/json/events/max/400"}
+  - {name: Purdue, group: US universities, region: West Lafayette, url: "https://events.purdue.edu/api/2/events?type[]=53816763920255"}
+  - {name: Wisconsin, group: US universities, region: Madison, url: "https://today.wisc.edu/events.ics"}
+  - {name: UT Austin, group: US universities, region: Austin, url: "https://calendar.utexas.edu/api/2/events"}
+  - {name: Rice, group: US universities, region: Houston, url: "https://events.rice.edu/live/json/events/max/400"}
+  - {name: Texas A&M, group: US universities, region: College Station, url: "https://calendar.tamu.edu/live/json/events/max/400"}
+  - {name: UF, group: US universities, region: Gainesville, url: "https://calendar.ufl.edu/live/json/events/max/400"}
+  - {name: UW Seattle, group: US universities, region: Seattle, url: "https://www.trumba.com/calendars/sea_campus.ics"}
+  - {name: USC, group: US universities, region: Los Angeles, url: "https://calendar.usc.edu/api/2/events?type[]=104812"}
+  - {name: UCSD, group: US universities, region: San Diego, url: "https://calendar.ucsd.edu/api/2/events?type[]=50076074273340&type[]=50171967663865"}
+  # Toronto & Waterloo
+  - {name: Toronto Tech Week, group: Toronto & Waterloo, region: Toronto / GTA, url: "https://lu.ma/torontotechweek"}
+  - {name: Eventbrite · Toronto career fairs, group: Toronto & Waterloo, region: Toronto / GTA, url: "https://www.eventbrite.ca/d/canada--toronto/career-fair/"}
+  - {name: Eventbrite · Toronto hackathons, group: Toronto & Waterloo, region: Toronto / GTA, url: "https://www.eventbrite.ca/d/canada--toronto/hackathon/"}
