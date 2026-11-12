@@ -9,7 +9,7 @@ It never presses Submit, never solves a CAPTCHA, and every change an AI makes ha
 
 ## Watch the film
 
-[![273: watch the Co-op Coach film](docs/film-273-poster.jpg)](YOUTUBE_LINK)
+![273: the Co-op Coach film](docs/film-273-poster.jpg)
 
 *273.* Every tech internship gets about 273 applications, and to a recruiter they all look the same. Two and a half
 minutes on how Alex, a first-year at Waterloo, stops applying like everyone else. Every screen is the real app.
@@ -18,7 +18,7 @@ minutes on how Alex, a first-year at Waterloo, stops applying like everyone else
 ## Try it in one command
 
 ```bash
-git clone https://github.com/gkhurana21/coop-coach.git && cd coop-coach
+git clone https://github.com/gkhurana21/co-op-coach.git && cd co-op-coach
 ./run.sh demo
 ```
 
@@ -236,3 +236,7 @@ own Claude or ChatGPT to fill a form: it then gets the answers it's typing in.
   false` turns it off). Indeed goes through the open-source `python-jobspy`.
 * Jake's Resume LaTeX template by Jake Gutierrez (MIT), based on sb2nov/resume. The LaTeX export was inspired by
   Martin Sit's [makeitjakes](https://github.com/martin226/makeitjakes) (MIT).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
