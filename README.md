@@ -1,5 +1,7 @@
 # Co-op Coach
 
+### ▶ [**Watch the film**](https://youtu.be/PQf5qarSaas) &nbsp;·&nbsp; [Portfolio](https://gaurangkhurana.ca)
+
 **An AI job-search agent for internship and co-op students.** It watches 4,700+ company career sites, ranks every
 posting against your resume (including whether you're even allowed to apply), prepares applications for you each
 morning, reads your recruiting email to keep your tracker current, and finds career events and hackathons at 30+
@@ -7,15 +9,7 @@ universities. It runs on your own Mac, and the AI is your own Claude Code or Cha
 
 It never presses Submit, never solves a CAPTCHA, and every change an AI makes has an Undo.
 
-## Watch the film
-
-[![273: watch the Co-op Coach film](docs/film-273-poster.jpg)](https://youtu.be/PQf5qarSaas)
-
-▶ **[Watch it on YouTube](https://youtu.be/PQf5qarSaas)** (2:24)
-
-*273.* Every tech internship gets about 273 applications, and to a recruiter they all look the same. Two and a half
-minutes on how Alex, a first-year at Waterloo, stops applying like everyone else. Every screen is the real app.
-
+[![Co-op Coach: the film](docs/film-273-poster.jpg)](https://youtu.be/PQf5qarSaas)
 
 ## Try it in one command
 
@@ -40,12 +34,9 @@ and no network, and it lives in its own `data-demo/` folder.
 | ![A track's companies](docs/screenshots/track-companies.png) | **A track's companies and market.** What its postings that are open to you ask for: each skill's share, how many list it as *required* and how many as *nice to have* (from each posting's own headings), and whether it's rising; where and when (terms, cities, remote, postings per month, who can apply, when firms open); stated pay as an hourly figure (median and middle half, with quotes, nothing converted or guessed); your fit and top gaps. Every number opens exactly the postings behind it. Resume Studio's market fit reads the same numbers for any track, and each gap gets one honest action: add a skill your bullets already show, confirm one you have, or plan a project that builds it. Employer tracks keep their firm lists: *Trading firms & funds* maps 161 firms in 12 segments, with *Find more* (from your postings and your AI, each checked live) and reminders before firms open. More in [docs/MATCH.md](docs/MATCH.md). |
 | ![Startups in Canada](docs/screenshots/startups.png) | **Startups in Canada.** A track of startups in Waterloo Region, Toronto and the rest of Canada (YC companies based here, the Waterloo & Toronto list, founders you know), fastest-hiring first: internships in Canada opened in the last 30 days (each once, however many boards list it) and how many roles their boards list against a month ago. *Watch* has the sync read a startup's job board. |
 | ![Applications](docs/screenshots/applications.png) | **Applications.** Connect Gmail or Outlook (or just paste an email) and recruiting mail moves each application along by itself: received, assessment, interview, offer, rejection. Interviews, online assessments, recruiter calls, coffee chats and info sessions found in your email (a calendar invite, or a time written in the email) go on your calendar with a reminder; a moved or cancelled invite updates it, and only the item is kept, never the email. A pasted invite works the same way and finds the posting you never tracked. |
-| ![People](docs/screenshots/people.png) | **People.** Who works where: your LinkedIn connections (from LinkedIn's own export), people you add, and every recruiter who writes to you, kept so a name or an address is never lost. Filter by role (founders, recruiters...), startups, hiring now, YC-backed or money raised (💰 your AI checks what a startup has disclosed), and open LinkedIn's own alumni search for any company. From recruiters' emails: name, email, title, phone and LinkedIn from their sign-off, grouped by kind of company (Big Tech, Quant & Trading, Banks...) and company, with the application each one is about. Emails sent by a hiring system keep the person who signed them; shared inboxes (careers@) are set apart. Star, add notes, add someone you met at a career fair, draft a thank-you or check-in, or download a spreadsheet. Your edits stay when they write again. |
 | ![Resume Studio](docs/screenshots/resume-studio.png) | **Resume Studio.** Your resume as an editable document with a live preview and a score. The checker proofreads first ("Inter" → "Intern", "MAy" → "May", lines split when the PDF was read) and fixes them in one click. Export PDF, Word or real Jake's Resume LaTeX (or open it in Overleaf). AI rewrites never invent numbers. |
 | ![Events](docs/screenshots/events-month.png) | **Events.** Info sessions, career fairs, networking and hackathons from 31 universities in Canada and the US (Stanford, MIT, Cornell, Waterloo, Western, SFU...), Toronto organizers, Luma, Meetup, Eventbrite, MLH and Devpost. List, month and hackathon-season views, and one private calendar link for Apple, Google or Outlook. |
-| ![Hackathons](docs/screenshots/hackathons.png) | **Hackathon season.** The 40 big student hackathons (Hack the North, UofTHacks, TreeHacks, HackMIT, Cal Hacks...), with real dates as soon as MLH or Devpost lists them, otherwise when each usually happens. *📝 Apply* gets the application ready: your details and MLH's level of study from your resume, the usual short answers ("Why this hackathon?", a project you're proud of, what you'll build) drafted from your real projects, your t-shirt, dietary and travel answers remembered, and the form filled in Chrome (after you sign in) or a zip to paste from; you tick MLH's boxes and submit. Afterwards, *🏁 Submit project* writes the Devpost submission from your public GitHub repo: the elevator pitch, Devpost's own sections, *Built with* tags read from the repo's languages and dependency files, a two-minute demo script, and the project as a resume entry (one click, with Undo). Anything only your team knows stays a [bracket]. |
 | ![Chat](docs/screenshots/chat.png) | **Jarvis, a chat that acts.** Jarvis (the little terminal from gkhurana's site) thinks while it works, writes its replies as you watch, cheers when you apply, and takes 🎤 voice. "Prepare my top 3", "research Ramp before my interview", "remind me Friday to follow up", "draft a referral ask", "how's my NeetCode?", "I solved Two Sum in 12 minutes", "what does the Forward Deployed market ask for?", "which smaller quant firms am I missing?", "who was the recruiter from RBC?", or paste a recruiter email. 62 tools, each step shown, with Undo. While the app is open, Jarvis's tools are answered by the running app itself, so a reply that uses two tools takes seconds. |
-| ![Your numbers](docs/screenshots/numbers.png) | **Your numbers.** Real counts (postings, applications, response rate, interviews) and a resume line built only from them. |
 
 ## How it works
 
@@ -127,7 +118,7 @@ flowchart LR
 * **Source checks:** `tools/discover_boards.py` re-mines career boards and keeps only ones that answer live;
   `tools/discover_event_sources.py --check` reads every university calendar and opens every hackathon site.
 * **Proof it works:** `tools/walkthrough.py` does each feature's try-it step in a real browser on a copy of the demo; `tools/audit_ui.py` presses each different safe button on every page, and in the windows they open, at desktop, phone and light; `tools/plugin_e2e.py` runs the plugin's commands in real Claude Code; `tools/live_forms.py` tries the form filler on real application pages with all sending blocked; `tools/feed_check.py` checks every track's numbers on the live feed; `tools/bench.py` and `tools/bench_ui.py` time every page.
-* **Demo assets:** `tools/record_demo.py` drives the demo with Playwright and records the screenshots and GIF above.
+* **The film:** `tools/record_film.py` films the real app on the demo student (slow-motion capture, so every frame is smooth) and `tools/cut_film.py` cuts it with an original score.
 
 ```
 coopcoach/
