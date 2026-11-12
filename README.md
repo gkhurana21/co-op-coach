@@ -1,29 +1,87 @@
+<div align="center">
+
 # Co-op Coach
 
-### ▶ [**Watch the film**](https://youtu.be/PQf5qarSaas) &nbsp;·&nbsp; [Portfolio](https://gaurangkhurana.ca)
+### Your AI co-op agent. It finds the internships, writes the applications and keeps score. You press Submit.
 
-**An AI job-search agent for internship and co-op students.** It watches 4,700+ company career sites, ranks every
-posting against your resume (including whether you're even allowed to apply), prepares applications for you each
-morning, reads your recruiting email to keep your tracker current, and finds career events and hackathons at 30+
-universities. It runs on your own Mac, and the AI is your own Claude Code or ChatGPT, or free Groq.
+*273 people applied to the same internship. This is how you stop being one of them.*
 
-It never presses Submit, never solves a CAPTCHA, and every change an AI makes has an Undo.
+<br/>
 
-[![Co-op Coach: the film](docs/film-273-poster.jpg)](https://youtu.be/PQf5qarSaas)
+[![Watch the film](https://img.shields.io/badge/Watch%20the%20film-2%3A22-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/PQf5qarSaas)
+[![Try the demo](https://img.shields.io/badge/Try%20the%20demo-one%20command-00C853?style=for-the-badge&logo=gnubash&logoColor=white)](#-try-it-in-one-command)
+[![Portfolio](https://img.shields.io/badge/Portfolio-gaurangkhurana.ca-111111?style=for-the-badge&logo=About.me&logoColor=white)](https://gaurangkhurana.ca)
 
-## Try it in one command
+<br/>
 
-```bash
-git clone https://github.com/gkhurana21/co-op-coach.git && cd co-op-coach
-./run.sh demo
-```
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20%2B%20MCP-D97757?style=flat-square&logo=anthropic&logoColor=white)
+![Chrome](https://img.shields.io/badge/Chrome-extension-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-shared%20feed-3FCF8E?style=flat-square&logo=supabase&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-1%2C719%20passing-brightgreen?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
-On Windows, download the code and double-click `run-demo.bat` (or `run.bat` for the real app). Then open
-<http://127.0.0.1:8790>. The demo is a fictional student (Alex Chen) with 250 real postings and 85 events
-from a snapshot, applications at every stage, and a resume with a few planted mistakes. It needs no account, no AI
-and no network, and it lives in its own `data-demo/` folder.
+[Film](#-the-film) • [Features](#-what-it-does) • [How it works](#how-it-works) • [Try it](#-try-it-in-one-command)
 
-## What it does
+</div>
+
+---
+
+## 🎬 The film
+
+https://github.com/user-attachments/assets/b756de94-84a5-49fe-9bc4-72d0b98ada6f
+
+<p align="center"><sub>Every shot is the real app running on a demo student, filmed by <code>tools/record_film.py</code>. Full quality on <a href="https://youtu.be/PQf5qarSaas">YouTube</a>.</sub></p>
+
+## The problem
+
+Co-op students send hundreds of applications into postings with hundreds of applicants each. Most of that work is
+the same: find the postings you're actually allowed to apply to, rewrite the same answers, chase the inbox, forget to
+prep. Everyone does it the same way, so everyone gets lost in the same pile.
+
+## The fix
+
+**Co-op Coach does the search and the paperwork, and leaves the decisions to you.** It watches 4,700+ company career
+sites, ranks every posting against your résumé (including whether you can even apply), prepares the best ones each
+morning, reads your recruiting email to move your tracker, and puts the interview on your calendar. Then it helps you
+get ready for it.
+
+<table>
+<tr>
+<td align="center" width="25%"><h3>27,000+</h3><sub>live postings in the shared feed, crawled 3× a day</sub></td>
+<td align="center" width="25%"><h3>4,700+</h3><sub>company career sites read directly</sub></td>
+<td align="center" width="25%"><h3>65</h3><sub>tools shared by the app, Jarvis, Claude Code and Chrome</sub></td>
+<td align="center" width="25%"><h3>0</h3><sub>applications ever submitted without you</sub></td>
+</tr>
+</table>
+
+## ✨ What it does
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/autopilot.png"/><br/><b>Today, with Jarvis.</b> Every morning Autopilot picks your best new matches, writes the answers, a tailored résumé and a cover letter, and lines them up in <i>Ready to apply</i>.</td>
+<td width="50%"><img src="docs/screenshots/matches.png"/><br/><b>Matches.</b> About 22,000 live internships scored 0–100 against your résumé. It reads each posting <i>and its form</i> for who can apply, so you never waste one.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/resume-studio.png"/><br/><b>Resume Studio.</b> Your résumé as a live document with a score and a checker. Describe a look and it redesigns it. Export PDF, Word or Jake's LaTeX. It never invents a number.</td>
+<td><img src="docs/screenshots/applications.png"/><br/><b>Applications.</b> Connect Gmail or Outlook and recruiting mail moves each card by itself, from received to offer. Interviews land on your calendar.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/path.png"/><br/><b>The Path.</b> The NeetCode 150 as a trail you come back to: timed tries, spaced review, tests, streaks and XP. Jarvis walks it with you.</td>
+<td><img src="docs/screenshots/tracks.png"/><br/><b>Tracks.</b> Browse by kind of role or employer: Quant, AI labs, Big Tech, Startups in Canada. New roles like Forward Deployed Engineer are found in the feed itself.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/chat.png"/><br/><b>Jarvis, a chat that acts.</b> "Prepare my top 3", "research Ramp before my interview", "I solved Two Sum in 12 minutes". 62 tools, every step shown, every change with an Undo.</td>
+<td><img src="docs/screenshots/events-month.png"/><br/><b>Events.</b> Info sessions, career fairs and hackathons from 31 universities plus Luma, MLH and Devpost, in one calendar you can subscribe to.</td>
+</tr>
+</table>
+
+**Works where you already are:** a Claude Code plugin (`/coop-coach:apply Shopify`), an MCP server, and a Chrome
+extension that fills the form on the page you're on, then stops before Submit.
+
+<details>
+<summary><b>Every feature, in detail</b></summary>
 
 | | |
 |---|---|
@@ -37,6 +95,19 @@ and no network, and it lives in its own `data-demo/` folder.
 | ![Resume Studio](docs/screenshots/resume-studio.png) | **Resume Studio.** Your resume as an editable document with a live preview and a score. The checker proofreads first ("Inter" → "Intern", "MAy" → "May", lines split when the PDF was read) and fixes them in one click. Export PDF, Word or real Jake's Resume LaTeX (or open it in Overleaf). AI rewrites never invent numbers. |
 | ![Events](docs/screenshots/events-month.png) | **Events.** Info sessions, career fairs, networking and hackathons from 31 universities in Canada and the US (Stanford, MIT, Cornell, Waterloo, Western, SFU...), Toronto organizers, Luma, Meetup, Eventbrite, MLH and Devpost. List, month and hackathon-season views, and one private calendar link for Apple, Google or Outlook. |
 | ![Chat](docs/screenshots/chat.png) | **Jarvis, a chat that acts.** Jarvis (the little terminal from gkhurana's site) thinks while it works, writes its replies as you watch, cheers when you apply, and takes 🎤 voice. "Prepare my top 3", "research Ramp before my interview", "remind me Friday to follow up", "draft a referral ask", "how's my NeetCode?", "I solved Two Sum in 12 minutes", "what does the Forward Deployed market ask for?", "which smaller quant firms am I missing?", "who was the recruiter from RBC?", or paste a recruiter email. 62 tools, each step shown, with Undo. While the app is open, Jarvis's tools are answered by the running app itself, so a reply that uses two tools takes seconds. |
+
+</details>
+
+## ⚡ Try it in one command
+
+```bash
+git clone https://github.com/gkhurana21/co-op-coach.git && cd co-op-coach
+./run.sh demo
+```
+
+Then open <http://127.0.0.1:8790>. On Windows, double-click `run-demo.bat`. The demo is a fictional student (Alex
+Chen) with 250 real postings, 85 events, applications at every stage and a résumé with a few planted mistakes. No
+account, no AI and no network needed; it lives in its own `data-demo/` folder.
 
 ## How it works
 
@@ -111,7 +182,7 @@ flowchart LR
 
 ## Engineering
 
-* **Tests:** 47 suites, 1,250+ checks, each suite in its own process with its own temporary data folder:
+* **Tests:** 64 suites, 1,700+ checks, each suite in its own process with its own temporary data folder:
   `.venv/bin/python -m tests.run_all`. Fakes stand in for the Claude Code and Codex CLIs, Groq, a Workday site (with a
   CAPTCHA and a honeypot field) and the university calendar APIs, so the suites run offline.
 * **CI:** GitHub Actions runs ruff (pyflakes + import order) and every suite on each push.
