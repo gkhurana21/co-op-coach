@@ -1,0 +1,82 @@
+name: crawl
+
+# The shared job feed's crawler (coopcoach/central.py): every board read into the feed's own schema on Supabase,
+# and each Co-op Coach pulls what changed. Times are UTC: full reads at 7:30, 12:30 and 17:30 Eastern (companies
+# post during North American business hours), quick checks of the boards that just posted in between, and new
+# boards from the public web once a week. central.CRAWLS lists the same times (a test checks they match).
+on:
+  schedule:
+    - cron: "30 11 * * *"   # full
+    - cron: "30 16 * * *"   # full
+    - cron: "30 21 * * *"   # full
+    - cron: "0 14 * * *"    # quick
+    - cron: "0 19 * * *"    # quick
+    - cron: "30 0 * * *"    # quick
+    - cron: "0 9 * * 0"     # discover (Sundays), then a full read
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "full, quick or discover"
+        type: choice
+        options: [full, quick, discover]
+        default: full
+
+concurrency:
+  group: crawl
+  cancel-in-progress: false   # a crawl that's running finishes; the next one waits for it
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COOPCOACH_DATABASE_URL: ${{ secrets.COOPCOACH_CENTRAL_DB_URL }}
+      COOPCOACH_PG_SCHEMA: coopcoach_central
+      COOPCOACH_SYNC_PROCESSES: "3"
+      COOPCOACH_DATA: ${{ github.workspace }}/crawler-data
+      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+      GROQ_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+    steps:
+      - name: Is the feed set up?
+        id: check
+        run: |
+          if [ -z "$COOPCOACH_DATABASE_URL" ]; then
+            echo "No COOPCOACH_CENTRAL_DB_URL secret: nothing to crawl into." && echo "go=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.go == 'yes'
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.go == 'yes'
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        if: steps.check.outputs.go == 'yes'
+        run: pip install -r requirements.txt keyrings.alt
+      - name: Week number (the YC directory is kept a week)
+        if: steps.check.outputs.go == 'yes'
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: steps.check.outputs.go == 'yes'
+        with:
+          path: crawler-data/cache
+          key: crawler-cache-${{ steps.week.outputs.week }}
+          restore-keys: crawler-cache-
+      - name: Crawl
+        if: steps.check.outputs.go == 'yes'
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 14 * * *"|"0 19 * * *"|"30 0 * * *") kind=quick ;;
+            "0 9 * * 0") kind=discover ;;
+            "") kind="${{ inputs.kind }}" ;;
+            *) kind=full ;;
+          esac
+          case "$kind" in
+            quick) python -m coopcoach crawl --quick ;;
+            discover) python -m coopcoach crawl --discover ;;
+            *) python -m coopcoach crawl ;;
+          esac
