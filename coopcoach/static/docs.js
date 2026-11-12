@@ -1,4 +1,4 @@
-/* Documents (Resume Studio, cover letters, formats), application packages, Workday logins, chat.
+/* Documents (Resume Studio, cover letters, formats), application packages, chat.
    Loaded before app.js; uses its helpers ($, api, esc, toast, S, ...) at call time. */
 
 const D = { sub: "studio", resume: null, lint: null, template: "jake", saveT: null, lintT: null, dirty: false, suggestions: {} };
@@ -9,12 +9,17 @@ const CAT_MAX = { impact: 40, brevity: 20, style: 20, completeness: 20 };
 async function renderDocuments() {
   const main = $("#main");
   D.sub = LS.get("docsub", "studio");
+  if (Date.now() - (renderDocuments.warmed || 0) > 60000) {  // the first PDF shouldn't wait for Chrome to start
+    renderDocuments.warmed = Date.now();
+    api("/api/resume/warm", { method: "POST" }).catch(() => {});
+  }
   main.innerHTML = `<div class="subnav">
-      ${[["studio", "Resume Studio"], ["letters", "Cover letters"]].map(([k, l]) =>
+      ${[["studio", "Resume Studio"], ["design", "Design"], ["letters", "Cover letters"]].map(([k, l]) =>
         `<button class="chip ${D.sub === k ? "on" : ""}" data-sub="${k}">${l}</button>`).join("")}
     </div><div id="docs-body"><div class="empty"><span class="spinner"></span></div></div>`;
   main.querySelectorAll("[data-sub]").forEach((b) => b.addEventListener("click", () => { LS.set("docsub", b.dataset.sub); renderDocuments(); }));
   if (D.sub === "letters" || D.sub === "formats") return renderLetters();
+  if (D.sub === "design") return renderDesign();
   return renderStudio();
 }
 
@@ -27,7 +32,7 @@ async function renderStudio() {
     $("#to-coach").addEventListener("click", (e) => { e.preventDefault(); openSettings("profile"); });
     return;
   }
-  D.resume = data.resume; D.lint = data.lint; D.template = data.template; D.suggestions = {};
+  D.resume = data.resume; D.lint = data.lint; D.template = data.template; D.suggestions = {}; D.theme = data.theme;
   body.innerHTML = `
     <div class="studio">
       <div class="card" id="editor"></div>
@@ -35,7 +40,6 @@ async function renderStudio() {
         <div class="card card-pad stack">
           <div class="score-card"><div><div class="score-big" id="score-num"></div><div class="muted small" id="score-grade"></div></div><div class="bars" id="score-bars"></div></div>
           <div class="row">
-            <select id="tpl">${Object.entries(data.templates).map(([k, l]) => `<option value="${k}" ${k === D.template ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
             <span class="spacer"></span>
             <span class="muted small" id="save-state">${data.built_by === "you" ? "Saved" : `Built from your upload (${byLabel(data.built_by)})`}</span>
           </div>
@@ -52,6 +56,7 @@ async function renderStudio() {
           <div class="row"><b class="small">What to fix</b> <span class="muted small" id="issue-count"></span><span class="spacer"></span><button class="btn btn-sm hidden" id="fix-all">Fix all small things</button></div>
           <div class="issue-list" id="issues"></div>
         </div>
+        <div class="card card-pad stack" id="fit-card"></div>
         <div class="card card-pad stack" id="coach-card">
           <div class="row"><h3 style="margin:0">🧠 Resume Coach</h3><span class="spacer"></span>
             <button class="btn btn-sm" id="coach-run">${S.app.ai_enabled ? "Review my resume" : "Quick check"}</button></div>
@@ -63,14 +68,13 @@ async function renderStudio() {
         <div class="preview-wrap" id="pv"><iframe id="preview" title="Resume preview"></iframe></div>
       </div>
     </div>`;
-  $("#tpl").addEventListener("change", (e) => { D.template = e.target.value; changed(true); });
   $("#compare").addEventListener("click", (e) => { e.preventDefault(); e.target.closest("details").open = false; openCompare(); });
   $("#fix-all").addEventListener("click", () => applyFixes("auto"));
   $("#improve-all").addEventListener("click", improveWeak);
   $("#coach-run").addEventListener("click", runCoach);
   $("#overleaf").addEventListener("click", async (e) => { e.preventDefault(); if (D.dirty) await new Promise((r) => setTimeout(r, 1300)); openInOverleaf(); });
   updateDownloads();
-  drawStyle(); drawEditor(); drawScore(); drawPreview();
+  drawStyle(); drawEditor(); drawScore(); drawPreview(); drawFit();
   new ResizeObserver(fitPreview).observe($("#pv"));
 }
 
@@ -133,32 +137,16 @@ function drawCoach() {
   });
 }
 
-// ---------- look & feel: colours, contact style, layout, one page ----------
-const PALETTE = [["Classic black", "#000000"], ["Navy", "#1f3a68"], ["Ocean", "#0b5c8a"], ["Teal", "#0f6e73"], ["Forest", "#1f6f50"],
-  ["Waterloo gold", "#8a6a00"], ["Burgundy", "#7a1f2b"], ["Crimson", "#b4232f"], ["Royal purple", "#4338ca"], ["Plum", "#6b2d6b"],
-  ["Slate", "#334155"], ["Charcoal", "#2b2b2b"]];
+// ---------- look: a summary here; the Design tab (design.js) is the full editor ----------
 function drawStyle() {
-  const st = D.resume.style || (D.resume.style = {});
-  const sw = (key) => PALETTE.map(([n, c]) => `<button type="button" class="swatch ${st[key] === c ? "on" : ""}" data-sw="${key}|${c}" title="${n}" style="background:${c}"></button>`).join("");
-  const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${st[key] === v ? "on" : ""}" data-seg="${key}|${v}">${l}</button>`).join("")}</div>`;
-  const tog = (key, label) => `<label class="switch"><input type="checkbox" data-tog="${key}" ${st[key] ? "checked" : ""}><span></span>${label}</label>`;
+  const st = D.resume.style || {}, F = (D.theme && D.theme.fonts) || {};
+  const font = (id) => (F[id] ? F[id].label : id);
   $("#style-card").innerHTML = `
-    <div class="row"><h3 style="margin:0">🎨 Look</h3><span class="spacer"></span><span class="muted small">applies to PDF, Word and LaTeX</span></div>
-    <div><div class="filter-label">Name & headings</div><div class="swatches">${sw("accent")}<label class="swatch custom" title="Any colour"><input type="color" data-color="accent" value="${st.accent || "#000000"}"></label></div></div>
-    <div><div class="filter-label">Links</div><div class="swatches">${sw("link_color")}<label class="swatch custom" title="Any colour"><input type="color" data-color="link_color" value="${st.link_color || "#000000"}"></label></div></div>
-    <div><div class="filter-label">Contact line</div>${seg("contact", [["icons", "Icons + labels"], ["emoji", "😀 Emoji + labels"], ["plain", "Plain links"]])}
-      <div class="muted small" style="margin-top:4px">${st.contact === "plain" ? "Shows full addresses (github.com/you)." : "Shows “GitHub”, “LinkedIn”… each one clickable."}${st.contact === "emoji" ? " LaTeX uses icons instead (it can't print emoji)." : ""}</div></div>
-    <div class="stack" style="gap:8px">
-      ${tog("one_page", "Fit to one page (shrinks type and spacing just enough)")}
-      ${tog("link_icons", "Little link icon next to companies & projects")}
-      ${tog("company_first", "Company above job title")}
-    </div>`;
-  const card = $("#style-card");
-  const set = (k, v) => { st[k] = v; drawStyle(); changed(true); };
-  card.querySelectorAll("[data-sw]").forEach((b) => b.addEventListener("click", () => { const [k, c] = b.dataset.sw.split("|"); set(k, c); }));
-  card.querySelectorAll("[data-color]").forEach((i) => i.addEventListener("change", () => set(i.dataset.color, i.value)));
-  card.querySelectorAll("[data-seg]").forEach((b) => b.addEventListener("click", () => { const [k, v] = b.dataset.seg.split("|"); set(k, v); }));
-  card.querySelectorAll("[data-tog]").forEach((i) => i.addEventListener("change", () => set(i.dataset.tog, i.checked)));
+    <div class="row"><h3 style="margin:0">🎨 Look</h3><span class="spacer"></span><button class="btn btn-sm" id="to-design">Open the Design editor</button></div>
+    <div class="te-look small"><i style="background:${esc(st.accent || "#000")}"></i>
+      <span>${esc(font(st.heading_font))}${st.body_font !== st.heading_font ? ` + ${esc(font(st.body_font))}` : ""} · ${st.body_size}pt · ${st.columns === 2 ? "two columns" : "one column"}</span></div>
+    <div class="muted small">Fonts, colours, sizes, spacing, headings and layout, with a live page beside the controls.</div>`;
+  $("#to-design").addEventListener("click", () => { LS.set("docsub", "design"); renderDocuments(); });
 }
 
 function showFit() {
@@ -553,7 +541,7 @@ async function openPackage(jobId) {
       ${j.url ? `<a class="btn btn-ghost btn-sm" href="${safeUrl(j.url)}" target="_blank" rel="noopener">Open posting ${extIcon}</a>` : ""}
       <a class="btn btn-sm" href="/api/package/download?${q}">⬇ Download everything (.zip)</a>
       <button class="icon-btn" id="pk-close" aria-label="Close">✕</button></div>
-    <div class="grid-2" style="grid-template-columns: 1.35fr 1fr; align-items:start">
+    <div class="grid-2 grid-lead">
       <div class="stack">
         ${L ? `<div class="row"><h3>Cover letter</h3><span class="spacer"></span>
           <select id="pk-fmt">${pk.formats.map((f) => `<option value="${esc(f.id)}" ${f.id === L.format_id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>
@@ -606,158 +594,32 @@ async function openPackage(jobId) {
   });
 }
 
-// ---------- Workday logins (Applications tab) ----------
-async function renderWorkdayCard() {
-  const box = $("#workday-card");
-  if (!box) return;
-  const d = await api(`/api/portals?profile_id=${S.pid}`);
-  const def = d.default_login, myEmail = (profile()?.profile || {}).email || "";
-  const defBox = def ? `<div class="wd-default"><div><b>✓ One login for every Workday site</b><div class="muted small">${esc(def)} · every Workday job you mark as applied gets checked automatically</div></div><span class="spacer"></span>
-      <button class="btn btn-ghost btn-sm" id="wd-def-copy">Copy password</button>
-      <button class="btn btn-ghost btn-sm" id="wd-def-edit">Change</button>
-      <button class="btn btn-ghost btn-sm" id="wd-def-off">Turn off</button></div>` : "";
-  const defForm = `<form class="stack${def ? " hidden" : ""}" id="wd-def-form">
-      <div class="muted small">💡 Use the <b>same email and a Workday-only password</b> on every company's Workday, and save it here once. Generate makes a strong one.</div>
-      <div class="row" style="flex-wrap:wrap"><input type="email" id="wd-def-user" placeholder="Email you use for Workday" value="${esc(def || myEmail)}" required style="flex:1 1 220px">
-        <div class="pw-row" style="flex:1.4 1 280px"><input type="password" id="wd-def-pass" placeholder="${def ? "New password (empty keeps the current one)" : "Your Workday password"}" autocomplete="new-password"${def ? "" : " required"}>
-          <button type="button" class="btn btn-ghost btn-sm" id="wd-def-gen">Generate</button><button type="button" class="btn btn-ghost btn-sm" id="wd-def-show">Show</button></div></div>
-      <div class="row"><button class="btn">Save my Workday login</button>${def ? '<button type="button" class="btn btn-ghost" id="wd-def-cancel">Cancel</button>' : ""}</div>
-    </form>`;
-  box.innerHTML = `<div class="card card-pad stack">
-    <div class="row"><h2>Workday logins</h2><span class="spacer"></span>
-      ${d.accounts.length ? `<button class="btn btn-ghost btn-sm" id="wd-check">${d.checking ? '<span class="spinner"></span> Checking…' : "Check statuses now"}</button>` : ""}</div>
-    <p class="muted small" style="margin:0">Some statuses only show inside each company's Workday. Co-op Coach signs in on each sync and updates your tracker. Passwords stay in your ${d.vault_backend === "macOS" ? "Mac's Keychain" : "system's credential store"}.${d.available ? "" : " <b>Install playwright to enable checks.</b>"}</p>
-    ${defBox}${defForm}
-    ${d.suggestions.length ? `<div class="row small"><span class="muted">You're tracking jobs on:</span>${d.suggestions.map((s) => `<button class="chip" data-sugg="${esc(s.site_url)}" data-co="${esc(s.company)}">+ ${esc(s.company)}</button>`).join("")}</div>` : ""}
-    ${d.accounts.length ? `<div class="table-wrap"><table><thead><tr><th>Company</th><th>Login</th><th>Last check</th><th></th></tr></thead><tbody>
-      ${d.accounts.map((a) => `<tr>
-        <td><b>${esc(a.company)}</b><div class="muted small">${esc(a.site_url.replace(/^https:\/\//, ""))}</div></td>
-        <td class="small">${esc(a.username)}${a.uses_default ? '<div class="muted small">shared login</div>' : ""}</td>
-        <td class="small">${a.needs_manual ? '<span class="tag warn">needs you</span> ' : ""}${esc((a.last_status || "not checked yet").replace(/^(ok|error|needs_manual): /, ""))}${a.last_check ? ` <span class="muted">· ${ago(a.last_check)}</span>` : ""}</td>
-        <td style="text-align:right;white-space:nowrap">
-          ${a.needs_manual || a.signin === "running" ? `<button class="btn btn-sm" data-signin="${a.id}">${a.signin === "running" ? '<span class="spinner"></span> Waiting for you…' : "Sign in yourself"}</button>` : ""}
-          <button class="btn btn-ghost btn-sm" data-copy="${a.id}" title="Copy password">Copy password</button>
-          <button class="btn btn-ghost btn-sm" data-del-wd="${a.id}">Remove</button></td></tr>`).join("")}
-    </tbody></table></div>` : ""}
-    <details class="connect"><summary>＋ ${def ? "Add a Workday site by hand (or one with a different password)" : "Save a login for one company"}</summary>
-      <form class="stack" id="wd-form">
-        <input type="url" id="wd-url" placeholder="Company careers link, e.g. https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1" required>
-        ${def ? `<label class="row small"><input type="checkbox" id="wd-shared" checked> Use my shared Workday login (${esc(def)})</label>` : ""}
-        <div class="row"><input type="text" id="wd-co" placeholder="Company name" style="flex:1"><input type="email" id="wd-user" placeholder="Login email" required style="flex:1.4"></div>
-        <div class="pw-row"><input type="password" id="wd-pass" placeholder="Password" required autocomplete="new-password">
-          <button type="button" class="btn btn-ghost btn-sm" id="wd-gen" title="Make a strong password for a new account">Generate</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="wd-show">Show</button></div>
-        <button class="btn">Save login</button>
-      </form></details>
-  </div>`;
-  const shared = () => !!$("#wd-shared")?.checked;
-  const syncShared = () => { $("#wd-user").classList.toggle("hidden", shared()); $("#wd-pass").closest(".pw-row").classList.toggle("hidden", shared()); $("#wd-user").required = !shared(); $("#wd-pass").required = !shared(); };
-  $("#wd-shared")?.addEventListener("change", syncShared);
-  if (def) syncShared();
-  $("#wd-def-gen").addEventListener("click", async () => {
-    const r = await api("/api/portals/generate-password", { method: "POST" });
-    $("#wd-def-pass").value = r.password; $("#wd-def-pass").type = "text"; $("#wd-def-show").textContent = "Hide";
-    try { await navigator.clipboard.writeText(r.password); toast("Strong password generated and copied. Use it on every Workday site"); } catch { toast("Strong password generated"); }
-  });
-  $("#wd-def-show").addEventListener("click", () => { const p = $("#wd-def-pass"); p.type = p.type === "password" ? "text" : "password"; $("#wd-def-show").textContent = p.type === "password" ? "Show" : "Hide"; });
-  $("#wd-def-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      const r = await api("/api/portals/default", { method: "PUT", json: { profile_id: S.pid, username: $("#wd-def-user").value, password: $("#wd-def-pass").value } });
-      toast(r.added ? `Saved. Added ${r.added} Workday site${r.added === 1 ? "" : "s"} from jobs you've applied to` : "Saved to your Keychain. Workday jobs you apply to from now on get checked automatically", 6000);
-      renderWorkdayCard();
-    } catch (err) { toast(err.message, 6000); }
-  });
-  $("#wd-def-edit")?.addEventListener("click", () => { $("#wd-def-form").classList.remove("hidden"); $("#wd-def-pass").focus(); });
-  $("#wd-def-cancel")?.addEventListener("click", () => $("#wd-def-form").classList.add("hidden"));
-  $("#wd-def-off")?.addEventListener("click", async () => {
-    if (!confirm("Turn off the shared Workday login? Its password is deleted from your Keychain and sites using it stop being checked.")) return;
-    await api(`/api/portals/default?profile_id=${S.pid}`, { method: "DELETE" }); renderWorkdayCard();
-  });
-  $("#wd-def-copy")?.addEventListener("click", async () => {
-    let code = "";
-    if (profile().has_passcode) {
-      code = await askPasscode("Confirm it's you", "Enter your passcode to copy your Workday password.");
-      if (code === null) return;
-    }
-    try {
-      const r = await api(`/api/portals/default/password?profile_id=${S.pid}`, { headers: { "X-Passcode": code } });
-      await navigator.clipboard.writeText(r.password); toast("Workday password copied. Paste it when the company's site asks");
-    } catch (err) { toast(err.message, 5000); }
-  });
-  $("#wd-check")?.addEventListener("click", async () => {
-    await api("/api/portals/check", { method: "POST", json: { profile_id: S.pid } });
-    toast("Signing in to each Workday site in the background…"); pollWorkday();
-  });
-  box.querySelectorAll("[data-sugg]").forEach((b) => b.addEventListener("click", () => {
-    box.querySelector("details.connect").open = true; $("#wd-url").value = b.dataset.sugg; $("#wd-co").value = b.dataset.co; $("#wd-user").focus();
-  }));
-  $("#wd-gen").addEventListener("click", async () => {
-    const r = await api("/api/portals/generate-password", { method: "POST" });
-    $("#wd-pass").value = r.password; $("#wd-pass").type = "text"; $("#wd-show").textContent = "Hide";
-    try { await navigator.clipboard.writeText(r.password); toast("Strong password generated and copied"); } catch { toast("Strong password generated"); }
-  });
-  $("#wd-show").addEventListener("click", () => { const p = $("#wd-pass"); p.type = p.type === "password" ? "text" : "password"; $("#wd-show").textContent = p.type === "password" ? "Show" : "Hide"; });
-  $("#wd-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      await api("/api/portals", { method: "POST", json: { profile_id: S.pid, url: $("#wd-url").value, company: $("#wd-co").value, username: $("#wd-user").value, password: $("#wd-pass").value, use_default: shared() } });
-      toast("Login saved to your Keychain"); renderWorkdayCard();
-    } catch (err) { toast(err.message, 6000); }
-  });
-  box.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
-    const p = profile();
-    let code = "";
-    if (p.has_passcode) {
-      code = await askPasscode("Confirm it's you", "Enter your passcode to copy this saved password.");
-      if (code === null) return;
-    }
-    try {
-      const r = await api(`/api/portals/${b.dataset.copy}/password`, { headers: { "X-Passcode": code } });
-      await navigator.clipboard.writeText(r.password); toast("Password copied");
-    } catch (err) { toast(err.message, 5000); }
-  }));
-  box.querySelectorAll("[data-del-wd]").forEach((b) => b.addEventListener("click", async () => {
-    if (!confirm("Remove this Workday site? It won't be checked any more (a site-specific password is deleted from your Keychain; your shared login stays).")) return;
-    await api(`/api/portals/${b.dataset.delWd}`, { method: "DELETE" }); renderWorkdayCard();
-  }));
-  box.querySelectorAll("[data-signin]").forEach((b) => b.addEventListener("click", async () => {
-    await api(`/api/portals/${b.dataset.signin}/signin`, { method: "POST" });
-    toast("A Chrome window is opening. Sign in there (solve any CAPTCHA), then come back", 6000);
-    pollWorkday();
-  }));
-}
-
-function pollWorkday() {
-  clearTimeout(pollWorkday._t);
-  pollWorkday._t = setTimeout(async () => {
-    if (!["tracker", "settings"].includes(S.tab)) return;
-    const d = await api(`/api/portals?profile_id=${S.pid}`).catch(() => null);
-    if (d && (d.checking || d.accounts.some((a) => a.signin === "running"))) { renderWorkdayCard(); pollWorkday(); }
-    else { await loadState(); render(); }
-  }, 4000);
-}
-
 // ---------- chat ----------
 function initChat() {
   if (initChat.done) return;
   initChat.done = true;
   const fab = $("#chat-fab"), panel = $("#chat-panel");
+  fab.innerHTML = jarvisDockMarkup();
+  jarvisSay();
+  $("#chat-avatar").innerHTML = jarvisSvg("hi", 34, { head: true });
   fab.classList.remove("hidden");
   if (!LS.get("chat.seen", false)) $("#chat-dot").classList.remove("hidden");
-  const open = () => { panel.classList.remove("hidden"); $("#chat-dot").classList.add("hidden"); LS.set("chat.seen", true); drawChat(); $("#chat-input").focus(); };
+  const open = () => { panel.classList.remove("hidden"); $("#chat-dot").classList.add("hidden"); LS.set("chat.seen", true); drawChat(); $("#chat-input").focus();
+    api("/api/chat/warm", { method: "POST", json: { profile_id: S.pid } }).catch(() => {}); };
   fab.addEventListener("click", () => (panel.classList.contains("hidden") ? open() : panel.classList.add("hidden")));
   $("#chat-close").addEventListener("click", () => panel.classList.add("hidden"));
   const inp = $("#chat-input");
   const grow = () => { inp.style.height = "auto"; inp.style.height = Math.min(inp.scrollHeight, 180) + "px"; };
   $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); const v = inp.value.trim(); if (v) { sendChat(v); grow(); } });
   inp.addEventListener("input", grow);
+  addVoice(inp, { label: "Talk to Jarvis" });
   inp.addEventListener("keydown", (e) => {  // Enter sends; Shift+Enter starts a new line (pasted emails keep theirs)
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#chat-form").requestSubmit(); }
   });
 }
 
 function chatLog() { return LS.get(`chat.${S.pid}`, []); }
+function chatText(t) { return linkify(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>").replace(/\n/g, "<br>"); }
 function linkify(t) { return esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u.length > 48 ? u.slice(0, 45) + "…" : u}</a>`); }
 
 // ---------- 📝 application kit ----------
@@ -859,6 +721,7 @@ function chatCard(c, mi, ci) {
   }
   if (c.type === "doc") return `<div class="chat-card"><button class="btn btn-sm" data-cc="doc" data-doc="${esc(String(c.doc_id))}">📄 ${esc(c.title)}</button></div>`;
   if (c.type === "review") return `<div class="chat-card"><button class="btn btn-sm" data-cc="studio">🧠 See the full review in Resume Studio</button></div>`;
+  if (c.type === "niche") return `<div class="chat-card"><button class="btn btn-sm" data-cc="niche" data-niche="${esc(c.id)}">🎯 Open ${esc(c.name)} in Explore</button></div>`;
   return "";
 }
 
@@ -877,17 +740,18 @@ function drawChat() {
   $("#chat-mode").innerHTML = S.app.ai_enabled ? `Agent · ${esc(S.app.ai_label)} · <a href="#" id="chat-connect">change</a>` : "Quick answers (add a free Groq key for the agent)";
   const log = chatLog();
   const greet = { role: "assistant", content: S.app.ai_enabled
-    ? `Hey ${p?.name || "there"}! I can do things, not just answer: find roles, prepare applications, track a recruiter email you paste here, research a company, draft replies and networking messages, set reminders, run mock interviews, fix your resume, and run Autopilot.`
+    ? `Hey ${p?.name || "there"}! I can do things, not just answer: find roles, prepare applications, track a recruiter email you paste here, log your NeetCode, research a company, draft replies and networking messages, set reminders, fix your resume, and run Autopilot.`
     : `Hey ${p?.name || "there"}! I can tell you what to apply to, what's new today, your application stats, upcoming events, or how to level up your resume.` };
-  $("#chat-log").innerHTML = [greet, ...log].map((m, mi) => {
+  const hello = log.length ? "" : `<div class="jarvis-hello">${jarvisSvg("hi", 96, { label: "Jarvis waving hello" })}</div>`;
+  $("#chat-log").innerHTML = hello + [greet, ...log].map((m, mi) => {
     if (m.role === "user") return `<div class="msg user">${esc(m.content)}</div>`;
     const steps = (m.steps || []).map((st) => `<div class="step ${st.ok ? "" : "bad"}">${st.ok ? "⚙️" : "⚠️"} ${esc(st.summary)}</div>`).join("");
     const undo = (m.undo || []).length ? `<button class="chip" data-undo="${mi - 1}" ${m.undone ? "disabled" : ""}>${m.undone ? "Undone" : "↩ Undo"}</button>` : "";
-    return `<div class="msg bot">${steps ? `<div class="steps-log">${steps}</div>` : ""}${linkify(m.content).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>").replace(/\n/g, "<br>")}${(m.cards || []).map((c, ci) => chatCard(c, mi, ci)).join("")}${undo ? `<div style="margin-top:6px">${undo}</div>` : ""}</div>`;
+    return `<div class="msg-row">${jarvisSvg(m.mood || "hi", 28, { head: true })}<div class="msg bot">${steps ? `<div class="steps-log">${steps}</div>` : ""}${chatText(m.content)}${(m.cards || []).map((c, ci) => chatCard(c, mi, ci)).join("")}${undo ? `<div style="margin-top:6px">${undo}</div>` : ""}</div></div>`;
   }).join("");
   $("#chat-suggest").innerHTML = (log.length ? [] : S.app.ai_enabled
-    ? ["What should I do today?", "Prepare my top 3 applications", "Best software co-ops in Toronto", "Hackathons this month", "Track a recruiter email…", "Research a company…", "Mock interview me", "Remind me…", "Fix my resume"]
-    : ["What should I apply to?", "Anything new today?", "How many interviews?", "Resume tips", "Events this week"])
+    ? ["What should I do today?", "Prepare my top 3 applications", "How's my streak?", "Startups hiring in Waterloo", "Best software co-ops in Toronto", "Track a recruiter email…", "Research a company…", "How's my NeetCode?", "Remind me…", "Fix my resume"]
+    : ["What should I apply to?", "Anything new today?", "How's my streak?", "Startups hiring", "How many interviews?", "Resume tips", "Events this week"])
     .map((s) => `<button class="chip" data-ask="${esc(s)}">${esc(s)}</button>`).join("");
   const starts = { "Track a recruiter email…": "Track this email:\n\n", "Research a company…": "Research ", "Remind me…": "Remind me " };
   document.querySelectorAll("[data-ask]").forEach((b) => b.addEventListener("click", () => {
@@ -905,6 +769,7 @@ function drawChat() {
       else if (act === "kit") openKit(job);
       else if (act === "package") openPackage(job);
       else if (act === "studio") { LS.set("docsub", "studio"); switchTab("documents"); }
+      else if (act === "niche") { $("#chat-panel").classList.add("hidden"); openNiche(b.dataset.niche); }
       else if (act === "doc") { try { viewDraft(await api(`/api/drafts/${b.dataset.doc}?profile_id=${S.pid}`)); } catch { toast("That draft was deleted"); } }
       else if (act === "apps") { $("#chat-panel").classList.add("hidden"); switchTab("tracker"); }
       else if (act === "drafts") { $("#chat-panel").classList.add("hidden"); switchTab("autopilot"); }
@@ -921,19 +786,61 @@ function drawChat() {
   const el = $("#chat-log"); el.scrollTop = el.scrollHeight;
 }
 
+// the reply as it's written, and which tool is at work meanwhile; what's said is replaced by the finished reply at the end
+const STEP_WORDS = { search_jobs: "Searching matches", job_details: "Reading the posting", queue_application: "Preparing it", coding_progress: "Checking your NeetCode", record_problem: "Logging it", my_path: "Checking your Path", my_calendar: "Checking your calendar", my_applications: "Checking your applications", daily_brief: "Checking what's new", ready_queue: "Checking Ready to apply", research_company: "Researching the company" };
+async function chatStream(json) {
+  working(1);
+  let res;
+  try { res = await fetch("/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) }); }
+  finally { working(-1); }
+  if (!res.ok || !res.body) return api("/api/chat", { method: "POST", json });
+  const typing = $("#typing .msg");
+  let said = "", held = "", done = null, failed = null;
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  for (;;) {
+    const { value, done: end } = await reader.read();
+    if (end) break;
+    held += dec.decode(value, { stream: true });
+    const lines = held.split("\n");
+    held = lines.pop();
+    for (const ln of lines) {
+      if (!ln.trim()) continue;
+      const e = JSON.parse(ln);
+      if (e.t === "delta") { said += e.v; if (typing) { typing.classList.remove("typing"); typing.innerHTML = chatText(said); } }
+      else if (e.t === "step" && typing && !said) { typing.classList.remove("typing"); typing.textContent = `${STEP_WORDS[e.v] || "Working"}…`; }
+      else if (e.t === "done") done = e.v;
+      else if (e.t === "error") failed = e.v;
+    }
+    const box = $("#chat-log");
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+  if (failed || !done) throw new Error(failed || "the reply stopped early");
+  return done;
+}
+
 async function sendChat(text) {
   const log = chatLog();
   log.push({ role: "user", content: text });
   LS.set(`chat.${S.pid}`, log.slice(-30));
   $("#chat-input").value = "";
   drawChat();
-  $("#chat-log").insertAdjacentHTML("beforeend", `<div class="msg bot" id="typing"><span class="spinner"></span> Working on it…</div>`);
+  $("#chat-log").insertAdjacentHTML("beforeend", `<div class="msg-row" id="typing">${jarvisSvg("thinking", 28, { head: true })}<div class="msg bot typing"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> Jarvis is on it…</div></div>`);
+  $("#chat-avatar").innerHTML = jarvisSvg("thinking", 34, { head: true });
+  jarvisSay("thinking it over", { key: "chat" });
   $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
   try {
-    const r = await api("/api/chat", { method: "POST", json: { profile_id: S.pid, messages: log.filter((m) => m.role).slice(-12).map((m) => ({ role: m.role, content: m.content })) } });
-    log.push({ role: "assistant", content: r.reply, steps: r.steps || [], cards: (r.cards || []).map(slimCard), undo: r.undo || [] });
+    const r = await chatStream({ profile_id: S.pid, messages: log.filter((m) => m.role).slice(-12).map((m) => ({ role: m.role, content: m.content })) });
+    // applied, an interview or an offer: Jarvis cheers
+    const win = (r.steps || []).some((s) => s.ok && /→ (applied|interviewing|oa|offer)\b/.test(s.summary));
+    log.push({ role: "assistant", content: r.reply, steps: r.steps || [], cards: (r.cards || []).map(slimCard), undo: r.undo || [], mood: win ? "cheer" : "talking" });
     if ((r.steps || []).some((s) => s.ok && /starred|→|preferences|event →/.test(s.summary))) { loadState().then(() => S.tab === "matches" && refreshJobs?.()); }
-  } catch (e) { log.push({ role: "assistant", content: `Sorry, something went wrong: ${e.message}` }); }
+  } catch (e) { log.push({ role: "assistant", content: `Sorry, something went wrong: ${e.message}`, mood: "oops" }); }
   LS.set(`chat.${S.pid}`, log.slice(-30));
   drawChat();
+  $("#chat-avatar").innerHTML = jarvisSvg("hi", 34, { head: true });
+  jarvisSay(null, { key: "chat" });
+  if (log[log.length - 1]?.mood === "cheer") {
+    $("#chat-avatar").innerHTML = jarvisSvg("cheer", 34, { head: true });
+    jarvisConfetti($("#chat-panel"));
+  }
 }

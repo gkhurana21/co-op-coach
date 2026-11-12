@@ -123,6 +123,8 @@ def refresh_yc(force: bool = False) -> int:
     global _yc_index
     with _yc_lock:
         fresh = YC_CACHE.exists() and time.time() - YC_CACHE.stat().st_mtime < 7 * 86400
+        if fresh and '"locations"' not in YC_CACHE.read_text(encoding="utf-8")[:4000]:
+            fresh = False  # a cache from before locations were kept (the startup feed needs them)
         if force or not fresh:
             try:
                 r = httpx.get(YC_URL, timeout=60, follow_redirects=True)
@@ -138,10 +140,13 @@ def refresh_yc(force: bool = False) -> int:
                         "one_liner": c.get("one_liner"),
                         "is_hiring": c.get("isHiring"),
                         "former_names": c.get("former_names") or [],
+                        "locations": c.get("all_locations") or "",  # "Toronto, ON, Canada; Remote"
+                        "industry": c.get("industry") or "",
+                        "logo": c.get("small_logo_thumb_url") or "",
                     }
                     for c in r.json()
                 ]
-                YC_CACHE.write_text(json.dumps(slim))
+                YC_CACHE.write_text(json.dumps(slim), encoding="utf-8")
             except (httpx.HTTPError, ValueError) as e:
                 log.warning("YC directory refresh failed: %s", e)
         _yc_index = None
@@ -155,7 +160,7 @@ def _load_yc() -> dict[str, dict]:
     idx: dict[str, dict] = {}
     if YC_CACHE.exists():
         try:
-            for c in json.loads(YC_CACHE.read_text()):
+            for c in json.loads(YC_CACHE.read_text(encoding="utf-8")):
                 if c.get("status") in ("Inactive", "Acquired") and not c.get("is_hiring"):
                     continue
                 for nm in [c.get("name")] + list(c.get("former_names") or []):
@@ -167,6 +172,16 @@ def _load_yc() -> dict[str, dict]:
             pass
     _yc_index = idx
     return idx
+
+
+def yc_all() -> list[dict]:
+    """Every company in the cached YC directory (refresh_yc keeps it up to date)."""
+    if not YC_CACHE.exists():
+        return []
+    try:
+        return json.loads(YC_CACHE.read_text(encoding="utf-8"))
+    except ValueError:
+        return []
 
 
 def yc_lookup(name: str) -> dict | None:

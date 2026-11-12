@@ -10,8 +10,12 @@ import sys
 SUBMIT = re.compile(
     r"\b(submit|send|finish|complete|confirm)\w*\b[^.]{0,40}\bapplication\b"      # "Submits the application"
     r"|\bapplication\b[^.]{0,20}\b(submit|send)\w*\b"                           # "application ... submitted"
-    r"|\bsubmit(s|ting)? (the |my |this |your )?(form|application)\b"            # "Submit the form"
-    r"|\b(click|press|tap)\w* (on )?(the )?[\"'“]?submit\b", re.I)              # "Clicks the Submit button"
+    r"|\b(submit|send)(s|ting|ing)? (the |my |this |your )?(form|application)\b"  # "Submit the form", "Sends the form"
+    r"|\b(click|press|tap|hit)\w* (on )?(the )?[\"'“‘]?(submit|send|finish)\b"   # "Clicks the Submit button", 'Click "Send"'
+    r"|\bto (finish|submit|send)\b(?!\s+(the |this )?(\w+ )?(section|step|page|field)s?\b)"  # "Press Enter to send"
+    # an Apply button on the form itself sends it ("click Apply on the job page" only opens the form)
+    r"|\b(click|press|tap|hit)\w*\b[^.]{0,30}\bapply\b[^.]{0,40}\b((bottom|end) of|on|in|within) (the |this )?"
+    r"(application )?form\b", re.I)
 
 
 def _summaries(tool_input: dict) -> list[str]:

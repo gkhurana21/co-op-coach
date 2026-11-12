@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Co-op Coach",
+  "version": "0.1.0",
+  "description": "Today, application form filling and inbox reading beside your browser. Requires the local Co-op Coach app.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.smartrecruiters.com/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Open Co-op Coach"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "optional_host_permissions": [
+    "https://outlook.office.com/*",
+    "https://outlook.office365.com/*",
+    "https://outlook.live.com/*",
+    "https://outlook.cloud.microsoft/*"
+  ]
+}

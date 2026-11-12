@@ -11,13 +11,18 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 TMP = tempfile.mkdtemp(prefix="coopcoach-cctest-")
 BIN = Path(TMP) / "bin" / "claude"
 BIN.parent.mkdir()
-BIN.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{Path(__file__).with_name("fake_claude.py")}" "$@"\n')
-BIN.chmod(BIN.stat().st_mode | stat.S_IEXEC)
+if os.name == "nt":  # Windows runs a .cmd wrapper; elsewhere a shell script
+    BIN = BIN.with_suffix(".cmd")
+    BIN.write_text(f'@"{sys.executable}" "{Path(__file__).with_name("fake_claude.py")}" %*\r\n', encoding="utf-8")
+else:
+    BIN.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{Path(__file__).with_name("fake_claude.py")}" "$@"\n', encoding="utf-8")
+    BIN.chmod(BIN.stat().st_mode | stat.S_IEXEC)
 LOG = Path(TMP) / "fake.log"
 os.environ.update(COOPCOACH_DATA=TMP, COOPCOACH_CLAUDE_BIN=str(BIN), FAKE_CLAUDE_LOG=str(LOG), GROQ_API_KEY="",
                   ANTHROPIC_API_KEY="sk-ant-should-not-leak", PYTHONPATH=str(Path(__file__).resolve().parent.parent))
@@ -26,7 +31,7 @@ from coopcoach import agent, ai, auth, autopilot, claude_code, claude_setup, db,
 
 
 def calls() -> list[dict]:
-    return [json.loads(x) for x in LOG.read_text().splitlines()] if LOG.exists() else []
+    return [json.loads(x) for x in LOG.read_text(encoding="utf-8").splitlines()] if LOG.exists() else []
 
 
 def seed():
@@ -52,6 +57,73 @@ def seed():
     return pid, [j["id"] for j in jobs]
 
 
+def wait_for(cond, seconds: float = 8) -> bool:
+    end = time.time() + seconds
+    while time.time() < end:
+        if cond():
+            return True
+        time.sleep(0.05)
+    return bool(cond())
+
+
+def sign_in_checks(pid: int, checks: dict) -> None:
+    """Signing in shows up within seconds and without a reload; /api/state never waits on the `claude` command."""
+    from types import SimpleNamespace
+
+    from coopcoach import routes_auto, server
+    os.environ["FAKE_CLAUDE_SIGNED_OUT"] = "1"
+    claude_code.status(refresh=True)
+    os.environ.pop("FAKE_CLAUDE_SIGNED_OUT")
+    cached = claude_code.status()["logged_in"]
+    claude_code._status["t"] -= claude_code.FRESH_SIGNED_OUT + 0.5
+    checks["'not signed in' is only reused for a few seconds"] = not cached and claude_code.status()["logged_in"]
+    os.environ["FAKE_CLAUDE_SIGNED_OUT"] = "1"
+    claude_code._status["t"] -= claude_code.FRESH_SIGNED_OUT + 0.5
+    checks["...while 'signed in' is reused for longer"] = claude_code.status()["logged_in"]
+
+    claude_code.status(refresh=True)  # signed out
+    claude_code.SIGNIN_POLL = 0.2
+    opened = []
+    real_osascript, claude_code._osascript = claude_code._osascript, opened.append  # never opens a real Terminal
+    try:
+        if sys.platform == "darwin":
+            claude_code.sign_in_in_terminal()
+        else:
+            claude_code.watch_sign_in("claude", claude_code.status)
+        time.sleep(0.5)
+        still_out = not claude_code.status_cached()["logged_in"]
+        os.environ.pop("FAKE_CLAUDE_SIGNED_OUT")  # the person finishes signing in, in the browser
+        t = time.time()
+        flipped = wait_for(lambda: claude_code.status_cached()["logged_in"])
+        checks["after Sign in, the app sees it finish within ~2 s, without anyone reloading"] = \
+            still_out and flipped and time.time() - t < 3 and (opened or sys.platform != "darwin")
+        checks["...and then stops checking"] = wait_for(lambda: not claude_code._watch_until.get("claude"), 3)
+    finally:
+        claude_code._osascript = real_osascript
+
+    os.environ["FAKE_CLAUDE_SLOW"] = "3"
+    claude_code._status["t"] = 0  # old: /api/state would have had to check again
+    t = time.time()
+    st = server.get_state(SimpleNamespace(cookies={}))
+    took = time.time() - t
+    checks["/api/state never waits on the `claude` command"] = took < 1.5 and st["claude_code"]["logged_in"] \
+        and st["ai_provider"] == "claude_code"
+    wait_for(lambda: not claude_code._checking.locked(), 6)  # the background refresh it started
+    os.environ.pop("FAKE_CLAUDE_SLOW")
+    os.environ["FAKE_CLAUDE_SIGNED_OUT"] = "1"
+    plugin_calls = lambda: len([c for c in calls() if "plugin" in c])  # noqa: E731
+    before = plugin_calls()
+    r = routes_auto.claude_status(pid, refresh=True)
+    checks["...and right after an explicit check it has the new answer"] = not r["logged_in"] and \
+        not server.get_state(SimpleNamespace(cookies={}))["claude_code"]["logged_in"]
+    os.environ.pop("FAKE_CLAUDE_SIGNED_OUT")
+    r = routes_auto.claude_status(pid, refresh=True)
+    checks["Settings' status check skips the slow `claude plugin list`"] = plugin_calls() == before and \
+        "plugin_installed" not in r and r["logged_in"]
+    r = routes_auto.claude_status(pid, refresh=True, plugins=True)
+    checks["...unless it's asked for"] = plugin_calls() == before + 1 and r["plugin_installed"] is False
+
+
 def main():
     pid, (shop, ws, usonly) = seed()
     checks = {}
@@ -66,6 +138,7 @@ def main():
     checks["the app keeps its old engine until you pick Claude Code"] = ai.provider() != "claude_code"
     db.meta_set("ai_engine", "claude_code")
     checks["picking it makes Claude Code the engine"] = ai.provider() == "claude_code" and ai.label() == "your Claude Code"
+    sign_in_checks(pid, checks)
 
     out = ai._call_json("Be terse.", [{"type": "text", "text": "Alex Chen (alex@example.com) wants a letter"}],
                         ai._obj({"letter": ai._STR}), effort="medium")
@@ -75,6 +148,16 @@ def main():
         last["args"][last["args"].index("--tools") + 1] == "" and "--json-schema" in last["args"]
     checks["...with contact details redacted"] = "Alex Chen" not in last["stdin"] and "alex@example.com" not in last["stdin"]
     checks["...on your Claude plan: no API key reaches Claude Code"] = not any(c.get("leaked_key") for c in calls())
+    # Windows: a .cmd launcher cuts arguments at a line break, so the system prompt goes in a file there
+    claude_code._WINDOWS = True
+    try:
+        claude_code.call_json("Line one.\nLine two.", "hi", ai._obj({"letter": ai._STR}), "low")
+    finally:
+        claude_code._WINDOWS = False
+    win = calls()[-1]["args"]
+    checks["on Windows the system prompt goes in a file (line breaks and the tool limits survive)"] = \
+        win[win.index("--system-prompt") + 1] == "Line one.\nLine two." and "--tools" in win and \
+        not list(claude_code._workdir().glob("system-*.txt"))
 
     LOG.unlink()
     res = agent.run(pid, [{"role": "user", "content": "best software roles in Toronto? star the top one"}])
@@ -88,8 +171,17 @@ def main():
         and "--strict-mcp-config" in agent_args and "mcp__coopcoach" in agent_args
     chat_tools = next(c["mcp_tools"] for c in calls() if "mcp_tools" in c)
     checks["...and the chat doesn't get the raw contact-details tool"] = "application_files" not in chat_tools and "star" in chat_tools
-    checks["the run's ticket is gone afterwards"] = not db.row("SELECT 1 FROM agent_tickets WHERE label='chat'")
-    checks["...and so is its MCP config file"] = not list((Path(TMP) / "claude-work").glob("mcp-*.json"))
+    from coopcoach import claude_chat
+    deadline = time.time() + 10
+    while time.time() < deadline and not (claude_chat._spares.get(pid) or {}).get("proc"):  # the next message's is on its way
+        time.sleep(0.05)
+    tickets = lambda: db.rows("SELECT 1 FROM agent_tickets WHERE label='chat'")  # noqa: E731
+    configs = lambda: list((Path(TMP) / "claude-work").glob("mcp-*.json"))  # noqa: E731
+    checks["once a run ends, its ticket and config go: only the next message's process has one"] = len(tickets()) == 1 and len(configs()) == 1
+    spare = claude_chat._spares[pid]
+    claude_chat._expire(pid, spare)
+    time.sleep(0.2)
+    checks["...and one left waiting is closed, ticket and config gone"] = spare["proc"].poll() is not None and not tickets() and not configs()
 
     out = agent.call(pid, "queue_application", {"job_id": usonly})
     checks["never prepares a posting they can't apply to"] = "error" in out and "can't apply" in out["error"]
@@ -106,9 +198,13 @@ def main():
 
     acts = agent.activity(pid)
     qa = next(a for a in acts if a["tool"] == "queue_application" and a["source"] == "autopilot")
-    agent.undo_action(pid, qa["id"])
-    checks["Activity log + Undo takes a prepared application back out"] = len(db.rows(
-        "SELECT 1 FROM ready_queue WHERE profile_id=?", (pid,))) == 1 and agent.activity(pid)[0]["source"] == "undo"
+    undone = agent.undo_action(pid, qa["id"])
+    left = db.rows("SELECT job_id, status, polish FROM ready_queue WHERE profile_id=?", (pid,))
+    newest = agent.activity(pid)[0]
+    checks["Activity log + Undo takes a prepared application back out"] = len(left) == 1
+    checks["...and the Undo shows in the log"] = newest["source"] == "undo"
+    if len(left) != 1 or newest["source"] != "undo":
+        print("    left:", left, "newest:", {k: newest.get(k) for k in ("tool", "source", "created_at", "summary")}, "undo said:", undone)
 
     with db.tx() as c:
         c.execute("DELETE FROM ready_queue")
@@ -164,6 +260,12 @@ def main():
     checks["the plugin's guard blocks Claude from submitting an application"] = run("Submits the application to Shopify") == 2 \
         and run("Clicks the Submit button") == 2
     checks["...but lets it fill and move between pages"] = run("Clicks Next to page 2") == 0 and run("Uploads the resume") == 0
+    checks["...also when the final click is described another way"] = all(run(s) == 2 for s in (
+        "Click the Apply button at the bottom of the form", 'Click "Send"', "Press Enter to send the form",
+        "Click the purple button to finish", "Clicks the Finish button", "Sends the form"))
+    checks["...while opening a form and moving through it stay allowed"] = all(run(s) == 0 for s in (
+        "click Apply on the job page", "Click 'Apply Now' to open the application form", "Click Next",
+        "Click the Next button at the bottom of the form", "Clicks Next to finish page 1", "Click Save and Continue"))
 
     for name, ok in checks.items():
         print(("PASS " if ok else "FAIL ") + name)

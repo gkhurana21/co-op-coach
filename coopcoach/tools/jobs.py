@@ -8,21 +8,32 @@ from .common import _app_row, _find_job, _job_brief
 
 
 def search_jobs(pid: int, query: str = "", location: str = "", role: str = "", company_type: str = "",
-                posted_within_days: int = 0, include_ineligible: bool = False, limit: int = 6) -> dict:
+                posted_within_days: int = 0, include_ineligible: bool = False, track: str = "", limit: int = 6, offset: int = 0) -> dict:
     tiers = {"yc": ["yc"], "startup": ["startup", "yc"], "big tech": ["bigtech"], "quant": ["quant"],
              "bank": ["finance"], "corporate": ["finance"]}.get(company_type.lower().strip(), [])
     role_map = {"software": "Software", "ai": "AI/ML/Data", "ml": "AI/ML/Data", "data": "AI/ML/Data",
                 "hardware": "Hardware", "quant": "Quant", "product": "Product/Design", "design": "Product/Design",
                 "business": "Business/Finance", "finance": "Business/Finance"}
     categories = [v for k, v in role_map.items() if k in role.lower()][:1]
+    tid = ""
+    if track:
+        from .explore import _track
+        found = _track(pid, track)
+        if not found:
+            return {"error": f"no track called {track}: list_tracks shows them"}
+        tid, tiers, categories = found["id"], [], []
     res = store.list_jobs(pid, q=query, tiers=tiers, categories=categories, since_days=posted_within_days,
-                          show_ineligible=include_ineligible, limit=5000)
+                          show_ineligible=include_ineligible, track=tid, limit=5000)
     jobs = res["jobs"]
     if location:  # match the place in locations, not just anywhere in the text
         loc = location.lower()
         jobs = [j for j in jobs if loc in " ".join(j["locations"]).lower() or (loc == "remote" and "Remote" in j["regions"])]
-    picked = jobs[:max(1, min(limit, 8))]
-    return {"total": len(jobs), "jobs": [_job_brief(j) for j in picked], "_card": {"type": "jobs", "jobs": picked}}
+    start = max(0, offset)
+    picked = jobs[start:start + max(1, min(limit, 25))]
+    out = {"total": len(jobs), "jobs": [_job_brief(j) for j in picked], "_card": {"type": "jobs", "jobs": picked}}
+    if start + len(picked) < len(jobs):
+        out["next_offset"] = start + len(picked)
+    return out
 
 
 def job_details(pid: int, job_id: str) -> dict:
@@ -97,22 +108,34 @@ def queue_application(pid: int, job_id: str, why: str = "", remove: bool = False
                       (pid, j["id"]))
         return {"ok": True, "removed": f"{j['company']} · {j['title']}"}
     if j["eligibility"] == "no":
-        return {"error": "this posting says you can't apply: " + "; ".join(r["text"] for r in j.get("requirements") or [])[:200]}
+        why = [r["text"] for r in j.get("requirements") or []] or [r["t"] for r in j["reasons"] if r.get("k") == "bad"]
+        return {"error": "this posting says you can't apply: " + "; ".join(why)[:200]}
     if j.get("app_status") in ("applied", "oa", "interviewing", "offer", "rejected"):
         return {"error": f"already {j['app_status']}"}
     have = db.row("SELECT status FROM ready_queue WHERE profile_id=? AND job_id=?", (pid, j["id"]))
     if have and have["status"] in ("ready", "opened"):
         return {"ok": True, "already_queued": True, "job": f"{j['company']} · {j['title']}"}
-    kit = apply.build_kit(pid, j["id"])
-    if kit.get("error"):
-        return kit
     from ..agent import _ctx  # who is asking (chat, Autopilot, MCP): agent sets it around each call
     ctx = _ctx.get()
+    want = {}
+    if ctx.get("source") == "autopilot":  # Autopilot's "what to prepare" settings: a letter or not, its style, drafts
+        from .. import autopilot
+        cfg = autopilot.settings(pid)
+        want = {"letter": cfg["letter"], "letter_fmt": cfg["letter_style"] or None, "ai_answers": cfg["ai_answers"]}
+    from .. import agent, polish
+    later = not agent.SHORT_LIVED  # (a helper process that ends with the chat can't finish anything afterwards)
+    kit = apply.build_kit(pid, j["id"], **want, quick=later)
+    if kit.get("error"):
+        return kit
     with db.tx() as c:
         c.execute("INSERT OR REPLACE INTO ready_queue (profile_id, job_id, status, why, kit, source, run_id, created_at,"
-                  " updated_at) VALUES (?,?,?,?,?,?,?,?,?)", (pid, j["id"], "ready", why.strip()[:400], db.dumps(kit),
-                                                             ctx.get("source", "app"), ctx.get("run_id"), db.now(), db.now()))
+                  " updated_at, polish, polish_tries) VALUES (?,?,?,?,?,?,?,?,?,?,0)",
+                  (pid, j["id"], "ready", why.strip()[:400], db.dumps(kit), ctx.get("source", "app"), ctx.get("run_id"),
+                   db.now(), db.now(), "pending" if later else "done"))
+    if later:
+        polish.enqueue(pid, j["id"])
     return {"ok": True, "job": f"{j['company']} · {j['title']}", "score": j["score"],
+            **({"polishing": "Ready now; the AI cover letter and written answers finish in the background."} if later else {}),
             "questions_answered": sum(1 for q in kit["questions"] if q.get("answer")),
             "needs_you": [q["label"] for q in kit["questions"] if q.get("needs_you")][:6],
             "_card": {"type": "kit", "job_id": j["id"], "title": f"{j['company']} · {j['title']}"},
@@ -232,6 +255,14 @@ def refresh_jobs(pid: int) -> dict:
     return {"ok": True, **server.trigger_sync()}
 
 
+def _known_link(pid: int, url: str) -> bool:
+    like = "%" + url.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    return bool(db.row("SELECT 1 AS k FROM jobs WHERE url=?", (url,))
+                or db.row("SELECT 1 AS k FROM applications WHERE profile_id=? AND (url=? OR notes LIKE ? ESCAPE '\\')",
+                          (pid, url, like))
+                or db.row("SELECT 1 AS k FROM events WHERE url=?", (url,)))
+
+
 def open_link(pid: int, url: str = "", job_id: str = "") -> dict:
     """Open a posting, application form, booking or assessment link in their browser on this Mac."""
     import subprocess
@@ -242,6 +273,9 @@ def open_link(pid: int, url: str = "", job_id: str = "") -> dict:
         url = (j or {}).get("apply_url") or (j or {}).get("url") or (a or {}).get("url") or ""
     if not re.match(r"https?://[^\s]+$", url or ""):
         return {"error": "need an http(s) link or a job_id with one"}
+    if not job_id and not _known_link(pid, url):  # a link planted in a web page or posting can't be opened this way
+        return {"error": "I only open links Co-op Coach already has (a posting, an application's booking or "
+                         "assessment link, an event). Paste the link here if you want it tracked."}
     if sys.platform == "darwin":
         subprocess.run(["open", url], check=False, timeout=15)
     else:

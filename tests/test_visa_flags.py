@@ -19,6 +19,13 @@ CASES = [
     ("Any offer may be conditioned on your authorization to receive technology controlled under these U.S. export "
      "laws without sponsorship for an export license.", set()),
     ("Company-sponsored sports teams and fitness events", set()),
+    ("Must be a US citizen. Applicants must also be authorized to work in Canada.", {"us_citizen", "sponsor_yes"}),
+    ("Must be a US citizen and authorized to work in the US.", {"us_citizen"}),
+    ("US citizenship is required; UK and Canada offices also recruit interns.", {"us_citizen"}),
+    ("Canada office nearby. Must obtain a US security clearance.", {"us_citizen"}),
+    ("No security clearance is required. Must be a US citizen.", {"us_citizen"}),
+    ("Must be a US citizen or legally authorized to work here.", set()),
+    ("Canadian security clearance is required.", set()),
     ("Build delightful products with React and Python.", set()),
 ]
 KEYS = {"sponsor_yes", "no_sponsor", "us_citizen"}

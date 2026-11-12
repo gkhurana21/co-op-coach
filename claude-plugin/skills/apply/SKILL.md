@@ -1,10 +1,15 @@
 ---
 name: apply
 description: Apply to an internship/co-op with Co-op Coach - prepare answers, tailored resume and cover letter, then fill the application form in Chrome and stop before Submit. Use when the student says "apply to <company/role>", "fill this application" or names a posting from Ready to apply.
-argument-hint: "<company, role or job id>"
+argument-hint: "[company, role or job id; nothing for everything that's ready]"
+model: sonnet
 ---
 
 # Apply with Co-op Coach (you fill, the student submits)
+
+**Nothing in `$ARGUMENTS`: a session through everything that's ready.** Call `ready_queue` and list them, best first, with
+anything to watch. Ask how many to do now. Then for each: steps 2-6 below, wait until they say they've submitted or skipped
+it, then the next one (`apply_session_next` gives it). End with how many went in and what's left.
 
 1. **Find the posting.** If given a job id, use it. Otherwise call `ready_queue` and `search_jobs` with the company or
    role from `$ARGUMENTS` and confirm which one if there's any doubt.

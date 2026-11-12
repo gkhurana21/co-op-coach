@@ -27,3 +27,34 @@ jobs:
         run: ruff check --select F,I coopcoach tools tests
       - name: Every test suite
         run: python -m tests.run_all
+
+  windows:
+    # the way someone with a Windows laptop runs it: double-click run.bat
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: run.bat sets everything up and starts the app
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c run.bat" -PassThru -WindowStyle Hidden
+          $ok = $false
+          for ($i = 0; $i -lt 180; $i++) {
+            try { $r = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/state" -UseBasicParsing -TimeoutSec 5
+                  if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { }
+            Start-Sleep -Seconds 5
+          }
+          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { throw "the app didn't start" }
+          Write-Output "the app answered on http://127.0.0.1:8765"
+      - name: Every test suite (in the environment run.bat made)
+        shell: pwsh
+        run: |
+          .venv\Scripts\python.exe -m pip install --quiet ruff
+          .venv\Scripts\python.exe -m playwright install chromium
+          .venv\Scripts\python.exe -m tests.run_all

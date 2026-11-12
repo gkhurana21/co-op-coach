@@ -9,7 +9,7 @@ import time
 from datetime import date
 
 from . import db
-from .textutil import detect_skills
+from .textutil import detect_skills, long_date
 
 BUILTIN_FORMATS = [
     {
@@ -254,7 +254,7 @@ def facts(profile: dict, resume: dict | None, job: dict, description: str = "", 
     story = (f"{proj_par.replace('Outside of work, I built', 'Last year I built', 1)}"
              if proj_par else "[Open with a project or moment that shows what you care about building.]")
     return {
-        "date": date.today().strftime("%B %-d, %Y"),
+        "date": long_date(date.today()),
         "name": h.get("name") or profile.get("name") or "[Your name]",
         "contact_line": contact, "links": " · ".join(links) or "[GitHub / portfolio]",
         "school": profile.get("university") or "[University]",

@@ -1,5 +1,6 @@
 """Indeed via the optional python-jobspy package (Indeed blocks plain HTTP scraping)."""
 
+import importlib.util
 import logging
 import math
 
@@ -9,11 +10,7 @@ log = logging.getLogger(__name__)
 
 
 def available() -> bool:
-    try:
-        import jobspy  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("jobspy") is not None  # (importing it takes half a second: pandas and all)
 
 
 def _val(v):

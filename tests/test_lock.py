@@ -36,6 +36,8 @@ B = sam.post("/api/profiles", json={"name": "Sam", "passcode": "sam-pass-99"}).j
 check("owner can open their own matches", alex.get(f"/api/jobs?profile_id={A}").status_code == 200)
 check("someone else's browser is locked out (query)", stranger.get(f"/api/jobs?profile_id={A}").status_code == 423)
 check("locked out (JSON body)", stranger.post("/api/chat", json={"profile_id": A, "messages": [{"role": "user", "content": "hi"}]}).status_code == 423)
+check("locked out (the chat as it's written)", stranger.post("/api/chat/stream", json={"profile_id": A, "messages": [{"role": "user", "content": "hi"}]}).status_code == 423)
+check("locked out (starting the chat ahead)", stranger.post("/api/chat/warm", json={"profile_id": A}).status_code == 423)
 check("locked out (path)", stranger.put(f"/api/profiles/{A}/prefs", json={"aim": "yc"}).status_code == 423)
 check("locked out (resume upload)", stranger.post(f"/api/profiles/{A}/resume", files={"file": ("r.txt", b"x" * 200)}).status_code == 423)
 
@@ -64,18 +66,9 @@ check("...and still can't open Alex", stranger.get(f"/api/jobs?profile_id={A}").
 stranger.post("/api/auth/unlock", json={"profile_id": A, "passcode": "maple-1234"})
 check("unlocking Alex locks Sam again (one person at a time)", stranger.get(f"/api/jobs?profile_id={B}").status_code == 423)
 
-# saved password needs the passcode again
-r = alex.post("/api/portals", json={"profile_id": A, "url": "https://example.wd3.myworkdayjobs.com/Test",
-                                   "username": "alex@example.com", "password": "Placeholder-Only-1!"})
-pid_portal = alex.get(f"/api/portals?profile_id={A}").json()["accounts"][0]["id"]
-check("copy password without re-entering passcode is refused", alex.get(f"/api/portals/{pid_portal}/password").status_code == 403)
-lan = client("192.168.1.50")
-lan.post("/api/auth/unlock", json={"profile_id": A, "passcode": "maple-1234"})
-check("copy password from another device on the network is refused",
-      lan.get(f"/api/portals/{pid_portal}/password", headers={"X-Passcode": "maple-1234"}).status_code == 403)
-r = alex.get(f"/api/portals/{pid_portal}/password", headers={"X-Passcode": "maple-1234"})
-check("copy password with passcode works", r.status_code == 200 and r.json()["password"] == "Placeholder-Only-1!")
-alex.delete(f"/api/portals/{pid_portal}")
+check("removed Workday credentials cannot be saved or retrieved", all(r.status_code == 404 for r in (
+    alex.post("/api/portals", json={"profile_id": A, "username": "alex@example.com", "password": "fictional"}),
+    alex.get(f"/api/portals/default/password?profile_id={A}"))))
 
 alex.post("/api/auth/lock")
 check("Lock button locks immediately", alex.get(f"/api/jobs?profile_id={A}").status_code == 423)

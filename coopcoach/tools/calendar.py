@@ -5,6 +5,7 @@ import re
 import time
 
 from .. import db, events, store
+from ..textutil import when_text
 from .common import _epoch
 
 log = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ def remind_me(pid: int, title: str, when: str, job_id: str = "") -> dict:
     with db.tx() as c:
         rid = c.execute("INSERT INTO reminders (profile_id, title, due_at, job_id, created_at) VALUES (?,?,?,?,?)",
                         (pid, title.strip()[:200], due, job_id or None, db.now())).lastrowid
-    return {"ok": True, "id": rid, "title": title, "at": time.strftime("%a %b %d, %-I:%M %p", time.localtime(due)),
+    return {"ok": True, "id": rid, "title": title, "at": when_text(due),
             "_undo": {"tool": "cancel_reminder", "args": {"reminder_id": rid}}}
 
 
@@ -84,7 +85,7 @@ def reminders(pid: int) -> dict:
     """Their upcoming reminders."""
     rows = db.rows("SELECT id, title, due_at, job_id FROM reminders WHERE profile_id=? AND done=0 AND due_at > ?"
                    " ORDER BY due_at LIMIT 20", (pid, db.now() - 86400))
-    return {"reminders": [{**r, "at": time.strftime("%a %b %d, %-I:%M %p", time.localtime(r["due_at"]))} for r in rows]}
+    return {"reminders": [{**r, "at": when_text(r["due_at"])} for r in rows]}
 
 
 def cancel_reminder(pid: int, reminder_id: int) -> dict:

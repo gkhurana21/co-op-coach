@@ -1,0 +1,36 @@
+# Which Claude model does which job. One edit here changes it everywhere, and for the plugin's commands too.
+#
+# These are Claude Code's tier names, not versions, so a new Haiku, Sonnet or Opus is used as soon as it ships.
+# Choosing per message with a stronger model would add seconds and cost to every reply, so the choice is made here.
+# Rule of thumb: haiku when someone's waiting or it's bulk; sonnet for writing that goes out under their name; opus when the
+# judgment is worth the wait. Settings can still override any of these (ai.models.<job>).
+jobs:
+  chat: haiku          # the assistant, answering while you wait (tools included)
+  scoring: haiku       # match scoring across many postings
+  inbox: haiku         # sorting recruiting mail
+  answers: haiku       # first drafts of an application's free-text questions
+  design: haiku        # a resume look from a description, while you wait
+  letter: sonnet       # cover letters
+  tailor: sonnet       # tailoring a resume to a posting
+  autopilot: sonnet    # choosing what to prepare, and writing the brief
+  research: sonnet     # researching a company
+  prep_sheet: opus     # an interview prep sheet: worth the wait
+  default: sonnet
+
+# The plugin's commands in your own Claude Code (the model each runs on, kept the same way).
+commands:
+  today: haiku
+  doctor: haiku
+  neetcode: haiku
+  track-email: haiku
+  tracks: haiku
+  events: haiku
+  followups: sonnet
+  hunt: sonnet
+  apply: sonnet
+  autopilot: sonnet
+  resume: sonnet
+  hackathon: sonnet
+  interview-prep: opus
+agents:
+  scout: haiku

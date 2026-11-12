@@ -522,17 +522,41 @@ def parse_exp_head(head: list[str]) -> dict:
     return out
 
 
+def name_line(text: str) -> str:
+    """The person's name as the file itself has it: the first short line near the top with no email or digits."""
+    for ln in [x.strip() for x in (text or "").splitlines() if x.strip()][:3]:
+        if 1 < len(ln.split()) <= 4 and not _EMAIL_RE.search(ln) and not re.search(r"\d", ln):
+            return ln.title() if ln.isupper() else ln
+    return ""
+
+
+def _name_words(s: str) -> set[str]:
+    return {w.lower() for w in re.findall(r"[^\W\d_]+(?:['-][^\W\d_]+)*", s or "")}
+
+
+def whole_name(found: str, in_file: str) -> str:
+    """An AI only sees the resume with the student's name hidden, so it can hand back part of it ("[[P0]] Chen" comes
+    back as "Chen") or the placeholder. The file's own line wins then; a different full name from the AI stands."""
+    found, in_file = (found or "").strip(), (in_file or "").strip()
+    if not in_file:
+        return found
+    if not found or "[[" in found or _name_words(found) < _name_words(in_file):
+        return in_file
+    return found
+
+
+def cut_by_hiding(saved: str, in_file: str, display: str) -> bool:
+    """Is `saved` that same damage: the file's name minus exactly the display name that was hidden from the AI?"""
+    have, whole, shown = _name_words(saved), _name_words(in_file), _name_words(display)
+    return bool(have and shown) and have < whole and whole - have == shown
+
+
 def heuristic_parse(text: str) -> dict:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     secs = _sections(lines)
     header = " ".join(secs.get("header", [])[:6])
     edu_text = "\n".join(secs.get("education", [])) or text[:1500]
-
-    name = ""
-    for ln in lines[:3]:
-        if 1 < len(ln.split()) <= 4 and not _EMAIL_RE.search(ln) and not re.search(r"\d", ln):
-            name = ln.title() if ln.isupper() else ln
-            break
+    name = name_line(text)
 
     university = ""
     for canon, rx in _UNIS:

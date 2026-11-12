@@ -89,6 +89,10 @@ def fetch_description(url: str) -> str:
     return ""
 
 
+CLOSED_RE = re.compile(r"no longer accepting applications|this (?:job|position|posting|role|requisition) is no longer (?:available|open|active)|"
+                       r"this job (?:posting )?has expired|position has been filled|not accepting applications at this time", re.I)
+
+
 def ensure_description(job_id: str) -> str:
     """Return the posting's description, fetching and caching it if we don't have one yet."""
     j = db.row("SELECT id, url, title, description FROM jobs WHERE id=?", (job_id,))
@@ -96,12 +100,19 @@ def ensure_description(job_id: str) -> str:
         return ""
     if j["description"] and len(j["description"]) > 200:
         return j["description"]
-    desc = fetch_description(j["url"])
+    from . import central
+    desc = central.description(job_id) or fetch_description(j["url"])  # the shared feed may have read it already
+    if desc and CLOSED_RE.search(desc[:1500]):  # closed since the last crawl: the page says so, so it leaves the list now
+        with db.tx() as c:
+            c.execute("UPDATE jobs SET active=0, changed_at=? WHERE id=?", (db.now(), job_id))
+        from . import store
+        store.invalidate_cache()
+        return ""
     if desc:
         skills, flags = detect_skills(f"{j['title']}\n{desc}"), detect_flags(j["title"], desc)
         with db.tx() as c:
-            c.execute("UPDATE jobs SET description=?, skills=?, flags=? WHERE id=?",
-                      (desc, db.dumps(skills), db.dumps(flags), job_id))
+            c.execute("UPDATE jobs SET description=?, skills=?, flags=?, changed_at=? WHERE id=?",
+                      (desc, db.dumps(skills), db.dumps(flags), db.now(), job_id))
         from . import store
         store.patch_job(job_id, skills=skills, flags=flags)
     return desc

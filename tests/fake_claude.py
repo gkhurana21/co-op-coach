@@ -1,6 +1,6 @@
 """A stand-in for the `claude` command, for tests: same flags and output shapes as Claude Code's print mode.
 
-* `--version`, `auth status`, `plugin ...`: canned answers.
+* `--version`, `auth status`, `plugin ...`: canned answers ($FAKE_CLAUDE_SLOW seconds of delay on `auth status`).
 * `-p --json-schema S`: a result whose structured_output fits S.
 * `-p --mcp-config F`: actually starts the MCP server from F (the real Co-op Coach one) and calls tools like an agent
   would, streaming stream-json events.
@@ -12,12 +12,13 @@ import json
 import os
 import re
 import sys
+import time
 
 
 def log(entry: dict) -> None:
     path = os.environ.get("FAKE_CLAUDE_LOG")
     if path:
-        with open(path, "a") as f:
+        with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
 
 
@@ -89,13 +90,25 @@ def main() -> None:
         print("2.1.282 (Claude Code)")
         return
     if args[:2] == ["auth", "status"]:
+        time.sleep(float(os.environ.get("FAKE_CLAUDE_SLOW") or 0))  # a slow keychain prompt, a cold start...
         print(json.dumps({"loggedIn": os.environ.get("FAKE_CLAUDE_SIGNED_OUT") != "1", "authMethod": "claude.ai"}))
         return
     if args[:1] == ["plugin"]:
         log({"plugin": args, "leaked_key": leaked})
         print("[]" if args[1:2] == ["list"] else "✔ done")
         return
-    prompt = sys.stdin.read() if "-p" in args else ""
+    streamed = opt(args, "--input-format") == "stream-json"  # a process started ahead: it waits here for the message
+    if streamed:
+        line = sys.stdin.readline()
+        if not line:
+            return
+        prompt = json.loads(line)["message"]["content"]
+    else:
+        prompt = sys.stdin.read() if "-p" in args else ""
+    if "--system-prompt-file" in args:  # Windows: the system prompt comes in a file; log it like the argument
+        i = args.index("--system-prompt-file")
+        with open(args[i + 1], encoding="utf-8") as f:
+            args = args[:i] + ["--system-prompt", f.read()] + args[i + 2:]
     log({"args": args, "stdin": prompt, "leaked_key": leaked})
     mode = os.environ.get("FAKE_CLAUDE_MODE", "")
     if mode == "limit":
@@ -107,7 +120,10 @@ def main() -> None:
         print(json.dumps({"type": "system", "subtype": "init", "mcp_servers": [{"name": "coopcoach", "status": "connected"}]}))
         for e in events:
             print(json.dumps(e))
-        print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": reply, "num_turns": 4}))
+        if "--include-partial-messages" in args:
+            for i in range(0, len(reply), 7):
+                print(json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": reply[i:i + 7]}}}), flush=True)
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": reply, "num_turns": 4}), flush=True)
         return
     schema = json.loads(opt(args, "--json-schema") or "{}")
     out = {"type": "result", "subtype": "success", "is_error": False, "result": "ok"}

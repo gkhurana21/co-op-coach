@@ -16,6 +16,9 @@ from coopcoach import db, demo, supa  # noqa: E402
 
 
 def main():
+    if os.environ.get("COOPCOACH_PG_SCHEMA") or os.environ.get("COOPCOACH_DATABASE_URL"):
+        print("SKIP the demo is SQLite-only by design (its own data-demo/ folder)")
+        return
     checks = {}
     checks["the demo never uses Supabase"] = not supa.enabled()
     demo.build(TMP)

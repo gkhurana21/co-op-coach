@@ -87,6 +87,11 @@ def _dictionary() -> tuple[set[str], dict]:
                 break
             except OSError:
                 continue
+        if not words:  # Windows has no system word list: the bundled one (Webster's 2nd, 1934, public domain)
+            import gzip
+            from pathlib import Path
+            with gzip.open(Path(__file__).with_name("words.txt.gz"), "rt", encoding="utf-8", errors="ignore") as fh:
+                words |= {w.strip().lower() for w in fh if w.strip()}
         from .textutil import SKILLS
         for name in SKILLS:
             words |= {x.lower() for x in re.findall(r"[A-Za-z]+", name)}
@@ -102,7 +107,7 @@ def _dictionary() -> tuple[set[str], dict]:
         cached = CACHE_DIR / "vocabulary.json"
         try:
             if cached.exists() and time.time() - cached.stat().st_mtime < 7 * 86400:
-                common = Counter(json.loads(cached.read_text()))
+                common = Counter(json.loads(cached.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             pass
         if not common:
@@ -113,7 +118,7 @@ def _dictionary() -> tuple[set[str], dict]:
                     common.update(w.lower() for w in re.findall(r"[A-Za-z]{3,}", row["d"] or ""))
                 common = Counter({w: n for w, n in common.items() if n >= 2})
                 if common:  # kept on this computer for a week, so it isn't read again from the database each start
-                    cached.write_text(json.dumps(common))
+                    cached.write_text(json.dumps(common), encoding="utf-8")
             except Exception:
                 pass
         words |= {w for w, n in common.items() if n >= 2}

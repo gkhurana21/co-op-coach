@@ -17,6 +17,7 @@ import copy
 import re
 
 from . import resume as rp
+from . import resume_theme as theme
 from .resume_checker import (  # noqa: F401 (moved; still reachable here)
     _USED_TO,
     _VERB_FOR,
@@ -76,8 +77,10 @@ from .textutil import detect_skills
 SECTIONS = ["education", "experience", "projects", "skills", "extras"]
 # How the resume looks. Colours come from a palette (or any hex the person picks); contact items show as icon or
 # emoji + a clickable label ("GitHub") instead of raw URLs, like most polished student resumes.
+# The look itself (fonts, sizes, headings, columns...) is in resume_theme; every key has to be listed here or
+# normalize() drops it.
 STYLE_DEFAULTS = {"accent": "#000000", "link_color": "#000000", "contact": "icons", "link_icons": True,
-                  "company_first": False, "one_page": True}
+                  "company_first": False, "one_page": True, **theme.THEME_DEFAULTS}
 PALETTE = [("Classic black", "#000000"), ("Navy", "#1f3a68"), ("Ocean", "#0b5c8a"), ("Teal", "#0f6e73"),
            ("Forest", "#1f6f50"), ("Waterloo gold", "#8a6a00"), ("Burgundy", "#7a1f2b"), ("Crimson", "#b4232f"),
            ("Royal purple", "#4338ca"), ("Plum", "#6b2d6b"), ("Slate", "#334155"), ("Charcoal", "#2b2b2b")]
@@ -96,11 +99,8 @@ def link_label(url: str) -> tuple[str, str]:
     return "Portfolio", "web"
 
 
-TEMPLATES = {
-    "jake": "Jake's (classic CS)",
-    "modern": "Modern (sans-serif)",
-    "classic": "Traditional (banks / corporate)",
-}
+# The starting presets of the Design editor (they used to be fixed templates).
+TEMPLATES = {k: v["label"] for k, v in theme.PRESETS.items()}
 
 # --- building a structured resume ---------------------------------------------------------
 
@@ -358,6 +358,9 @@ def normalize(r: dict) -> dict:
             r["style"][k] = STYLE_DEFAULTS[k]
     if r["style"]["contact"] not in ("icons", "emoji", "plain"):
         r["style"]["contact"] = "icons"
+    for k in ("link_icons", "company_first", "one_page"):
+        r["style"][k] = bool(r["style"][k])
+    theme.normalize_theme(r["style"])
     order = [s for s in r.get("section_order") or [] if s in SECTIONS]
     r["section_order"] = order + [s for s in SECTIONS if s not in order]
     return r

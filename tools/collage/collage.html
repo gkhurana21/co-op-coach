@@ -1,0 +1,120 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Instrument+Serif:ital@0;1&family=Archivo+Black&family=Courier+Prime:wght@700&display=block" rel="stylesheet">
+<style>
+html,body{margin:0;width:1920px;height:1080px;overflow:hidden;background:#d9c7a3}
+#stage{position:absolute;inset:0;overflow:hidden}
+.bg{position:absolute;inset:-40px}
+.it{position:absolute;left:0;top:0;transform-origin:50% 50%;will-change:transform}
+.sh{filter:drop-shadow(0 10px 14px rgba(40,25,10,.28)) drop-shadow(0 2px 3px rgba(40,25,10,.25))}
+.cut{position:absolute;inset:0;background-size:cover;background-position:center}
+.tape{position:absolute;width:120px;height:34px;background:rgba(240,228,190,.78);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.hand{font-family:Caveat,cursive;font-weight:700;color:#23314a;white-space:nowrap}
+.serif{font-family:"Instrument Serif",serif}
+svg{position:absolute;left:0;top:0;overflow:visible}
+.letter{display:inline-block;padding:4px 10px 2px;margin:0 3px;font-size:86px;line-height:1}
+</style></head><body><div id="stage"></div>
+<script>
+// ------- tiny deterministic toolkit -------
+const W=1920,H=1080, stage=document.getElementById('stage');
+let seed=7; const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646};
+const R=(a,b)=>a+(b-a)*rnd();
+const ease={io:p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2, out:p=>1-Math.pow(1-p,3), back:p=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2)}, in:p=>p*p*p};
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+function torn(n=46,j=.012){ // jagged polygon in %
+  const pts=[];const side=(x0,y0,x1,y1,k)=>{for(let i=0;i<k;i++){const t=i/k;pts.push([(x0+(x1-x0)*t)*100+R(-j,j)*100,(y0+(y1-y0)*t)*100+R(-j,j)*100])}};
+  const k=Math.max(6,n>>2);side(0,0,1,0,k);side(1,0,1,1,k);side(1,1,0,1,k);side(0,1,0,0,k);
+  return 'polygon('+pts.map(p=>p[0].toFixed(2)+'% '+p[1].toFixed(2)+'%').join(',')+')'}
+const items=[];
+function el(html,opts={}){const d=document.createElement('div');d.className='it '+(opts.cls||'');d.innerHTML=html;if(opts.w)d.style.width=opts.w+'px';if(opts.h)d.style.height=opts.h+'px';
+  (opts.parent||stage).appendChild(d);const it={d,keys:opts.keys||[],boil:opts.boil??1,show:opts.show||[0,999],seed:Math.floor(R(1,9999)),w:opts.w||0,h:opts.h||0};items.push(it);return it}
+function paper(src,w,h,opts={}){ // a scissor-cut photo or coloured paper, with optional tape
+  const fill=src.startsWith('#')?`background:${src}`:`background-image:url(${src})`;
+  const tape=(opts.tape??true)?`<div class="tape" style="left:${w/2-60+R(-30,30)}px;top:-14px;transform:rotate(${R(-8,8)}deg)"></div>`:'';
+  return el(`<div class="sh" style="position:absolute;inset:0"><div class="cut" style="${fill};clip-path:${torn(60,opts.j??.006)};${opts.style||''}">${opts.inner||''}</div></div>${tape}`,{...opts,w,h})}
+function text(html,cls,opts={}){return el(`<div class="${cls}" style="${opts.style||''}">${html}</div>`,opts)}
+function ransom(word,x,y,opts={}){const fonts=["'Archivo Black'","'Instrument Serif'","'Courier Prime'","Caveat"];const cols=[['#f4efe4','#1d2433'],['#1d2433','#f4efe4'],['#5cf2b0','#0b2a20'],['#f6d36b','#2b2111'],['#ffffff','#b23a2e']];
+  return [...word].map((ch,i)=>{if(ch===' ')return null;const c=cols[(i*3+word.length)%cols.length];
+    const sz=opts.size||90;return paper(c[0],Math.round(sz*.86),Math.round(sz*1.18),{tape:false,j:.03,inner:`<div style="display:grid;place-items:center;height:100%;font-family:${fonts[(i*7+3)%4]};color:${c[1]};font-size:${sz}px;line-height:1">${ch}</div>`,keys:[],show:opts.show})}).filter(Boolean)}
+function draw(path,stroke,width,opts={}){const s=el(`<svg width="${W}" height="${H}"><path d="${path}" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" ${opts.dash?`stroke-dasharray="${opts.dash}"`:''}/></svg>`,{...opts,boil:opts.boil??1});
+  s.path=s.d.querySelector('path');s.len=s.path.getTotalLength();if(!opts.dash){s.path.style.strokeDasharray=s.len}s.draw=opts.draw||[0,1];return s}
+// key: {t, x,y,s,r,o}; values held between keys, eased with key.e
+function fill(keys){let prev={x:0,y:0,s:1,r:0,o:1};return keys.map(k=>{const f={...prev,...k};prev=f;return f})}
+function sample(keys,t){if(!keys.length)return{x:0,y:0,s:1,r:0,o:1};if(!keys._f||keys._f.length!==keys.length){keys._f=fill(keys)}const K=keys._f;let a=K[0];if(t<=a.t)return a;for(let i=1;i<K.length;i++){const b=K[i];if(t<b.t){const p=(b.e||ease.io)((t-a.t)/(b.t-a.t));const o={};for(const k of['x','y','s','r','o'])o[k]=a[k]+(b[k]-a[k])*p;return o}a=b}return a}
+// ------- the film -------
+const A='assets/';
+const bgKraft=el(`<div style="position:absolute;inset:0;background:radial-gradient(1400px 900px at 50% 45%,#e8d8b4,#cdb68b);"></div><svg width="2000" height="1160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="4"/><feColorMatrix values="0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .12 0 0 0 .22 0"/></filter><rect width="2000" height="1160" filter="url(#n)"/></svg>`,{cls:'bg',boil:0});
+const bgNight=el(`<div style="position:absolute;inset:0;background:radial-gradient(900px 700px at 50% 55%,#1b3446,#0c1620)"></div><svg width="2000" height="1160"><filter id="n2"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="9"/><feColorMatrix values="0 0 0 0 .7 0 0 0 0 .8 0 0 0 0 .9 0 0 0 .08 0"/></filter><rect width="2000" height="1160" filter="url(#n2)"/></svg>`,{cls:'bg',boil:0,show:[16.4,30.2]});
+bgNight.keys=[{t:16.4,o:0},{t:17.2,o:1},{t:29.4,o:1},{t:30.2,o:0}];
+const bgCork=el(`<div style="position:absolute;inset:0;background:radial-gradient(1300px 800px at 50% 50%,#c99a63,#a87545)"></div><svg width="2000" height="1160"><filter id="n3"><feTurbulence type="fractalNoise" baseFrequency=".55" numOctaves="4" seed="2"/><feColorMatrix values="0 0 0 0 .25 0 0 0 0 .15 0 0 0 0 .05 0 0 0 .5 0"/></filter><rect width="2000" height="1160" filter="url(#n3)"/></svg>`,{cls:'bg',boil:0,show:[29.6,48.6]});
+bgCork.keys=[{t:29.6,o:0},{t:30.4,o:1},{t:47.8,o:1},{t:48.6,o:0}];
+
+// S1: Alex sends it (0-5)
+const alex=paper(A+'alex.jpg',620,346,{show:[0,10.5],keys:[{t:0,x:650,y:1200,s:.9,r:-8},{t:.9,x:650,y:300,s:1,r:-3,e:ease.back},{t:4.4,x:650,y:290,s:1,r:-2},{t:5.2,x:300,y:120,s:.42,r:-6,e:ease.io},{t:9.8,x:300,y:120,s:.42,r:-6},{t:10.5,x:300,y:-400,s:.42,r:-6,e:ease.in}]});
+const sent=text('Application sent ✓','hand',{style:'font-size:64px;color:#1f6b52',show:[1.4,5],keys:[{t:1.4,x:1310,y:520,s:.4,o:0,r:-6},{t:1.9,x:1310,y:520,s:1,o:1,r:-6,e:ease.back},{t:4.6,x:1310,y:520,s:1,o:1,r:-6},{t:5,x:1310,y:520,s:1,o:0,r:-6}]});
+const arrow1=draw('M1300 600 C 1220 640, 1220 700, 1270 720','#1f6b52',6,{show:[1.6,5],draw:[1.6,2.3]});
+const hi=text('meet Alex.<br><span style="font-size:44px">first year. first application.</span>','hand',{style:'font-size:78px;line-height:.95',show:[.6,4.8],keys:[{t:.6,x:120,y:820,o:0,r:-3},{t:1.2,x:120,y:800,o:1,r:-3,e:ease.out},{t:4.4,x:120,y:800,o:1,r:-3},{t:4.8,x:120,y:800,o:0,r:-3}]});
+// S2: 273 of him (5-10.5)
+const grid=[];{const cols=21,rows=13,gw=82,gh=72;let k=0;const order=[...Array(273).keys()].sort((a,b)=>R(-1,1));for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const i=k++;const at=5.3+order.indexOf(i)/273*3.6;
+  grid.push(paper(A+'face.jpg',72,62,{tape:false,j:.03,show:[at,10.6],keys:[{t:at,x:100+c*gw+R(-4,4),y:120+r*gh+R(-4,4),s:0,r:R(-12,12)},{t:at+.25,x:100+c*gw+R(-4,4),y:120+r*gh+R(-4,4),s:1,r:R(-10,10),e:ease.back},{t:10.1,s:1},{t:10.6,s:0,e:ease.in}]}))}}
+const counter=text('<span id="cnt">1</span>','hand',{style:'font-size:150px;color:#b23a2e',show:[5.2,10.6],keys:[{t:5.2,x:1540,y:-10,o:0,r:4},{t:5.6,x:1540,y:-10,o:1,r:4},{t:10.2,o:1},{t:10.6,o:0}]});
+// S3: they all look the same (10.5-16.5)
+const hdr=ransom('SAME',620,90,{show:[10.6,16.6],size:110,step:150});
+hdr.forEach((h,i)=>{h.keys=[{t:10.6+i*.12,x:620+i*170,y:-200,r:R(-10,10)},{t:11.1+i*.12,x:620+i*170,y:80,r:R(-8,8),e:ease.back},{t:16,y:80},{t:16.6,y:-300,e:ease.in}]});
+const strips=[];for(let i=0;i<16;i++){const x=R(80,1700),r=R(-25,25),at=11.6+i*.22;strips.push(paper('#fbf7ee',380,64,{tape:false,j:.04,inner:'<div class="serif" style="font-size:44px;font-style:italic;color:#b23a2e;padding:6px 18px">unfortunately,</div>',show:[at,16.6],keys:[{t:at,x,y:-120,r},{t:at+.9,x:x+R(-60,60),y:R(300,900),r:r+R(-20,20),e:ease.out},{t:16,o:1},{t:16.6,o:0}]}))}
+const goose=paper(A+'goose.jpg',560,420,{show:[13.8,16.7],keys:[{t:13.8,x:1300,y:1200,r:8},{t:14.3,x:1270,y:560,r:4,e:ease.back},{t:16.1,x:1270,y:560,r:4},{t:16.7,x:1270,y:1300,r:4,e:ease.in}]});
+const honk=text('HONK.','hand',{style:'font-size:110px;color:#1d2433',show:[14.5,16.5],keys:[{t:14.5,x:1080,y:430,s:.3,o:0,r:-12},{t:14.8,x:1080,y:430,s:1,o:1,r:-12,e:ease.back},{t:16.2,o:1},{t:16.5,o:0}]});
+// S4: January, the scissors (16.5-24)
+const jan=text('January.','hand',{style:'font-size:120px;color:#e8eef2',show:[16.8,23.8],keys:[{t:16.8,x:120,y:90,o:0,r:-4},{t:17.4,x:120,y:80,o:1,r:-4,e:ease.out},{t:23.3,o:1},{t:23.8,o:0}]});
+const hall=paper(A+'hall.jpg',1100,620,{show:[17,24.2],j:.004,keys:[{t:17,x:410,y:1150,r:2},{t:17.8,x:410,y:300,r:-1,e:ease.out},{t:23.6,x:410,y:300,r:-1},{t:24.2,x:410,y:1200,r:-1,e:ease.in}]});
+const dim=el('<div style="position:absolute;inset:0;background:rgba(6,12,18,.62)"></div>',{w:1100,h:620,boil:0,show:[19.8,24.2]});dim.follow=hall;dim.keys=[{t:19.8,o:0},{t:21.4,o:1}];
+const loop=draw('M960 690 C 1050 690, 1075 760, 1060 840 C 1045 915, 880 925, 862 840 C 845 760, 880 690, 960 690','#f4efe4',5,{dash:'14 12',show:[19,24.2]});
+const scissors=el(`<svg width="160" height="160" viewBox="-80 -80 160 160" style="left:-80px;top:-80px"><g id="bl1"><path d="M0 0 L70 -8 L70 4 Z" fill="#dfe6ea" stroke="#2a3540" stroke-width="3"/><circle cx="-28" cy="-14" r="16" fill="none" stroke="#e05a4a" stroke-width="9"/></g><g id="bl2"><path d="M0 0 L70 8 L70 -4 Z" fill="#c9d3d9" stroke="#2a3540" stroke-width="3"/><circle cx="-28" cy="14" r="16" fill="none" stroke="#e05a4a" stroke-width="9"/></g><circle r="5" fill="#2a3540"/></svg>`,{boil:0,show:[19.4,22.9]});
+const alexCut=paper(A+'hero.jpg',230,250,{tape:false,j:.03,show:[22.4,30.2],keys:[{t:22.4,x:845,y:690,s:1,r:0},{t:23.2,x:845,y:560,s:1.5,r:-4,e:ease.back},{t:24,x:845,y:470,s:1.9,r:-3},{t:29.5,x:845,y:470,s:1.9,r:-3},{t:30.2,x:845,y:-500,s:1.9,r:-3,e:ease.in}]});
+const glow=el('<div style="width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(92,242,176,.42),rgba(92,242,176,0) 70%)"></div>',{boil:0,show:[22.6,30.2],w:700,h:700});glow.keys=[{t:22.6,x:610,y:250,o:0},{t:23.8,x:610,y:250,o:1},{t:29.4,o:1},{t:30.2,o:0}];
+const stand=text('one application that\'s <span style="color:#5cf2b0">actually his.</span>','hand',{style:'font-size:76px;color:#e8eef2',show:[24.2,26.9],keys:[{t:24.2,x:560,y:930,o:0,r:-2},{t:24.8,x:560,y:910,o:1,r:-2,e:ease.out},{t:26.4,o:1},{t:26.9,o:0}]});
+// S5: the resume (24.5-30): bad page crumples, new page tapes in
+const bad=paper('#fffef9',470,610,{show:[25,30.2],inner:`<div style="padding:26px 30px;font:13px/1.35 'Times New Roman',serif;color:#222"><div style="text-align:center;font:700 22px 'Comic Sans MS',serif">ALEX CHEN - RESUME</div><div style="text-align:center;margin-bottom:10px">alexchen2007_coolguy@hotmail.com</div><b><u>OBJECTIVE</u></b><br>I am a hardworking team player looking for a oppurtunity to grow in a fast paced enviroment.<br><br><b><u>EXPERIENCE</u></b><br>- Worked on the software for the rover<br>- Helped out with the computer system<br>- Responsable for various tasks as needed<br><br><b><u>SKILLS</u></b><br>Microsoft Word, Typing, Hard Worker, Fast Learner<br><br><b><u>REFERENCES</u></b><br>Avaliable upon request</div>`,keys:[{t:25,x:150,y:1150,r:-6},{t:25.6,x:150,y:330,r:-5,e:ease.back},{t:27.1,x:150,y:330,r:-5,s:1},{t:27.7,x:330,y:560,r:-40,s:.12,e:ease.in},{t:28,o:0}]});
+const red1=draw('M180 470 C 300 440, 520 450, 590 480','#d23b2b',6,{show:[25.9,27.3],draw:[25.9,26.4]});
+const red2=draw('M190 640 C 330 610, 470 620, 560 650','#d23b2b',6,{show:[26.3,27.3],draw:[26.3,26.8]});
+const good=paper(A+'good.png',520,672,{show:[27.4,30.4],keys:[{t:27.4,x:1300,y:1200,r:6},{t:28,x:1250,y:300,r:2,e:ease.back},{t:29.7,x:1250,y:300,r:2},{t:30.4,x:1250,y:1250,r:2,e:ease.in}]});
+const said=text('same Alex.<br><span style="color:#5cf2b0">finally said properly.</span>','hand',{style:'font-size:64px;color:#e8eef2;line-height:1',show:[27.9,30],keys:[{t:27.9,x:560,y:900,o:0,r:-2},{t:28.4,x:560,y:890,o:1,r:-2,e:ease.out},{t:29.6,o:1},{t:30,o:0}]});
+// S6: the corkboard of features (30-48)
+const cards=[['today.jpg','what matters today',30.6,90,95,-3],['matches.jpg','ranked against his resume',33.2,690,70,2],['kit.jpg','answers from what he really did',35.9,1290,105,-2],['form.jpg','fills it… and stops at Submit',38.6,110,585,2],['path.jpg','NeetCode 150, tracked',41.6,705,565,-2],['jarvis.jpg','just ask Jarvis',44.2,1300,595,3]];
+cards.forEach(([img,label,at,x,y,r],i)=>{const end=47.6;paper(A+img,540,304,{j:.004,show:[at,48.4],keys:[{t:at,x:x+R(-200,200),y:1250,r:r+R(-15,15)},{t:at+.6,x,y,r,e:ease.back},{t:end-.1*i,x,y,r},{t:48.3-.08*i,x,y:-600,r,e:ease.in}]});
+  text(label,'hand',{style:'font-size:46px;color:#fdf6e3;text-shadow:0 2px 0 #4a3420',show:[at+.4,48.2],keys:[{t:at+.4,x:x+20,y:y+312,o:0,r:r-1},{t:at+.8,x:x+20,y:y+312,o:1,r:r-1,e:ease.out},{t:end,o:1},{t:48.2,o:0}]})});
+// S7: the email (48-53.5)
+const env=paper('#f3e9d2',520,330,{show:[48.4,53.8],inner:`<svg width="520" height="330"><path d="M10 12 L260 180 L510 12" fill="none" stroke="#b49a6a" stroke-width="5"/></svg><div class="hand" style="position:absolute;left:40px;bottom:30px;font-size:44px;color:#3a2c18">from: Northwind Robotics</div>`,keys:[{t:48.4,x:-700,y:300,r:-25},{t:49.2,x:700,y:330,r:-4,e:ease.out},{t:53.2,x:700,y:330,r:-4},{t:53.8,x:700,y:1300,r:-4,e:ease.in}]});
+const stamp=text('INTERVIEW','',{style:'font:900 92px "Archivo Black";color:#c43b2c;border:8px solid #c43b2c;padding:4px 22px;border-radius:12px;opacity:.9;letter-spacing:.04em',show:[49.9,53.8],keys:[{t:49.9,x:760,y:420,s:2.4,o:0,r:-14},{t:50.15,x:760,y:420,s:1,o:1,r:-14,e:ease.in},{t:53.4,o:1},{t:53.8,o:0}]});
+const sticky=paper('#ffe27a',300,260,{show:[50.8,53.8],inner:'<div class="hand" style="padding:26px;font-size:54px;line-height:1;color:#3a2c18">Wed<br>11:00 AM ✓</div>',keys:[{t:50.8,x:1450,y:-300,r:9},{t:51.3,x:1380,y:180,r:7,e:ease.back},{t:53.4,x:1380,y:180,r:7},{t:53.8,x:1380,y:-400,r:7,e:ease.in}]});
+const four=text('four days later…','hand',{style:'font-size:70px;color:#2a1d0e',show:[48.4,50.4],keys:[{t:48.4,x:120,y:120,o:0},{t:48.8,x:120,y:110,o:1,e:ease.out},{t:50,o:1},{t:50.4,o:0}]});
+// S8: calm, and the end (53.5-62)
+const calm=paper(A+'calm.jpg',900,502,{show:[53.8,62.5],keys:[{t:53.8,x:150,y:1200,r:-4},{t:54.6,x:150,y:280,r:-3,e:ease.out},{t:62.5,x:150,y:270,r:-3}]});
+const sun=draw('M1390 230 m -60 0 a 60 60 0 1 0 120 0 a 60 60 0 1 0 -120 0 M1390 130 L1390 100 M1390 330 L1390 360 M1290 230 L1260 230 M1490 230 L1520 230 M1320 160 L1300 140 M1460 160 L1480 140','#e0a32a',6,{show:[55,62.5],draw:[55,56.2]});
+const brand=ransom('CO-OP COACH',1110,520,{show:[56.4,62.5],size:72,step:70});
+brand.forEach((b,i)=>{const g=i>=5?40:0;b.keys=[{t:56.4+i*.07,x:1090+i*68+g,y:1200,r:R(-14,14)},{t:56.9+i*.07,x:1090+i*68+g,y:520,r:R(-7,7),e:ease.back}]});
+const press=text('you press <span style="color:#1f6b52">Submit.</span>','hand',{style:'font-size:84px;color:#23314a',show:[57.8,62.5],keys:[{t:57.8,x:1130,y:690,o:0,r:-3},{t:58.4,x:1130,y:680,o:1,r:-3,e:ease.out}]});
+const fine=text('Alex is fictional. Outcome dramatized.','',{style:'font:20px "Courier Prime";color:#5b4a30',show:[58.6,62.5],keys:[{t:58.6,x:1130,y:990,o:0},{t:59.2,x:1130,y:990,o:1}]});
+
+// ------- render a moment -------
+window.renderAt=function(t){
+  const step=Math.floor(t*12);  // the hand-made "boil": everything twitches 12 times a second
+  for(const it of items){
+    const vis=t>=it.show[0]&&t<=it.show[1];it.d.style.display=vis?'block':'none';if(!vis)continue;
+    const base=it.follow?sample(it.follow.keys,t):null;const k=sample(it.keys,t);
+    if(it.keys.length&&k.x===undefined&&!base){}
+    let x=base?base.x:(k.x??0),y=base?base.y:(k.y??0),s=base?base.s??1:(k.s??1),r=base?base.r??0:(k.r??0),o=k.o??1;
+    if(it.boil){const q=Math.sin((step+it.seed)*12.9898)*43758.5453;const f=q-Math.floor(q);x+=(f-.5)*2.2;y+=((f*7)%1-.5)*2.2;r+=((f*13)%1-.5)*.6}
+    it.d.style.transform=`translate(${x}px,${y}px) rotate(${r}deg) scale(${s})`;it.d.style.opacity=o;
+    if(it.path&&it.draw){const p=ease.io(clamp((t-it.draw[0])/(it.draw[1]-it.draw[0])));it.path.style.strokeDashoffset=it.len*(1-p)}
+  }
+  // the counter
+  const c=document.getElementById('cnt');if(c)c.textContent=Math.max(1,Math.min(273,Math.round(273*Math.pow(clamp((t-5.3)/3.6),1.6))));
+  // the scissors run round the dotted line, blades snapping
+  if(t>=19.4&&t<=22.9){const p=ease.io(clamp((t-19.6)/3));const pt=loop.path.getPointAtLength(loop.len*p),pt2=loop.path.getPointAtLength(Math.min(loop.len,loop.len*p+2));
+    const ang=Math.atan2(pt2.y-pt.y,pt2.x-pt.x)*180/Math.PI;scissors.d.style.transform=`translate(${pt.x}px,${pt.y}px) rotate(${ang}deg)`;
+    const open=Math.abs(Math.sin(t*16))*18;scissors.d.querySelector('#bl1').setAttribute('transform',`rotate(${-open})`);scissors.d.querySelector('#bl2').setAttribute('transform',`rotate(${open})`)}
+  // the crowd in the hall fades once Alex is cut out
+  return true};
+window.DURATION=62.5;
+window.ready=document.fonts.ready.then(()=>Promise.all([...document.querySelectorAll('.cut')].map(d=>{const m=/url\("?(.*?)"?\)/.exec(d.style.backgroundImage||'');if(!m)return 1;return new Promise(r=>{const i=new Image();i.onload=i.onerror=r;i.src=m[1]})})));
+</script></body></html>

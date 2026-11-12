@@ -145,7 +145,31 @@ def check_ticket(token: str | None) -> int | None:
     return r["profile_id"]
 
 
+_run_tools: dict[str, set[str]] = {}  # a run's ticket -> the tools it may use through the running app
+
+
+CONNECTION_LABELS = ("Claude Code plugin", "ChatGPT plugin")
+
+
+def allow_tools(token: str, tools) -> None:
+    _run_tools[_token_hash(token)] = set(tools)
+
+
+def ticket_tools(token: str | None) -> set[str]:
+    """The tools a run's ticket may use through the running app (none for any other ticket)."""
+    return _run_tools.get(_token_hash(token), set()) if token else set()
+
+
+def is_connection(token: str | None) -> bool:
+    """A lasting connection made from the app ("Connect my Claude Code"), which opens every tool over MCP anyway."""
+    if not token:
+        return False
+    r = db.row("SELECT label, expires_at FROM agent_tickets WHERE token_hash=?", (_token_hash(token),))
+    return bool(r) and r["expires_at"] is None and r["label"] in CONNECTION_LABELS
+
+
 def revoke_ticket(token: str) -> None:
+    _run_tools.pop(_token_hash(token), None)
     with db.tx() as c:
         c.execute("DELETE FROM agent_tickets WHERE token_hash=?", (_token_hash(token),))
 

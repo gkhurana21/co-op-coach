@@ -2,7 +2,7 @@
 
 import threading
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 
 from . import agent, ai, auth, autopilot, claude_code, codex_cli, companies, db, store
 
@@ -12,11 +12,13 @@ router = APIRouter()
 # --- your Claude Code ---------------------------------------------------------------------------------------
 
 @router.get("/api/claude/status")
-def claude_status(profile_id: int, refresh: bool = False):
+def claude_status(profile_id: int, refresh: bool = False, plugins: bool = False):
+    """`refresh` checks again now (a second or two); `plugins` also asks whether the plugin is installed, which is
+    slow (`claude plugin list`), so only when asked."""
     s = claude_code.status(refresh=refresh)
     out = {**s, "engine": ai.engine_choice(), "provider": ai.provider(), "label": ai.label(),
            "connections": auth.connections(profile_id)}
-    if refresh and s["installed"]:
+    if plugins and s["installed"]:
         from . import claude_setup
         try:
             out["plugin_installed"] = claude_setup.installed()
@@ -56,9 +58,9 @@ def claude_connect(body: dict = Body(...)):
 
 
 @router.get("/api/codex/status")
-def codex_status(profile_id: int, refresh: bool = False):
+def codex_status(profile_id: int, refresh: bool = False, plugins: bool = False):
     out = {**codex_cli.status(refresh=refresh), "engine": ai.engine_choice(), "provider": ai.provider()}
-    if refresh and out["installed"]:
+    if plugins and out["installed"]:
         from . import claude_setup
         try:
             out["plugin_installed"] = claude_setup.codex_installed()
@@ -142,12 +144,39 @@ def database_status(profile_id: int):
     return out
 
 
+@router.get("/api/central")
+def central_status():
+    """The shared job feed: on or off, its last crawl, and what this app pulled."""
+    from . import central
+    return central.status()
+
+
+@router.post("/api/central")
+def central_switch(body: dict = Body(...)):
+    from . import central, server
+    if body.get("on"):
+        out = central.turn_on()
+        if out.get("error"):
+            raise HTTPException(400, out["error"])
+    else:
+        out = central.turn_off()
+    try:  # checks run every 15 minutes on the feed (a pull is cheap), every 20 otherwise
+        from . import config
+        quick = float(config.get("sync.quick_minutes", 20))
+        minutes = min(quick or 15, float(config.get("sync.feed_minutes", 15))) if body.get("on") else quick
+        if minutes > 0 and server.scheduler.get_job("quick"):
+            server.scheduler.reschedule_job("quick", trigger="interval", minutes=minutes)
+    except Exception:
+        pass
+    return {k: (len(v) if isinstance(v, list) else v) for k, v in out.items()}
+
+
 # --- Autopilot ----------------------------------------------------------------------------------------------
 
 def _queue(pid: int) -> list[dict]:
-    rows = db.rows("SELECT job_id, status, why, source, created_at, updated_at FROM ready_queue WHERE profile_id=?"
+    rows = db.rows("SELECT job_id, status, why, source, created_at, updated_at, polish FROM ready_queue WHERE profile_id=?"
                    " AND (status IN ('ready', 'opened') OR updated_at > ?) ORDER BY status IN ('ready', 'opened') DESC,"
-                   " created_at DESC LIMIT 40", (pid, db.now() - 7 * 86400))
+                   " created_at DESC LIMIT 40", (pid, db.this_hour() - 7 * 86400))
     by = {}
     for j in store.scored_jobs(pid):
         for i in j["alt_ids"]:
@@ -181,7 +210,35 @@ def get_autopilot(profile_id: int):
             "events": [{k: e.get(k) for k in ("id", "title", "start_ts", "all_day", "region", "url", "mark", "company")}
                        for e in soon],
             "activity": agent.activity(profile_id, 40), "skip_reasons": autopilot.SKIP_REASONS,
-            "tiers": companies.TIERS}
+            "tiers": companies.TIERS, "max_per_run": autopilot.MAX_PER_RUN, "upcoming": _upcoming(profile_id)}
+
+
+def _upcoming(pid: int) -> list[dict]:
+    """Interviews, assessments, coffee chats and info sessions in the next week, and times still to book (for Jarvis's
+    hello on Today)."""
+    from . import meetings
+    now = db.this_hour()
+    out, seen = [], set()
+    for r in meetings.upcoming(pid, 7):
+        if r["status"] == "to_book":
+            out.append({"kind": "book", "label": r["label"], "company": r["company"] or r["who"] or "", "at": now + 7 * 86400,
+                        "job_id": r["job_id"], "url": r["book_url"]})
+        else:
+            out.append({"kind": "assessment" if r["kind"] == "oa" else r["kind"], "label": r["label"], "title": r["title"],
+                        "company": r["company"] or r["who"] or "", "at": r["start_ts"] or r["due_ts"],
+                        "job_id": r["job_id"], "url": r["join_url"]})
+            if r["job_id"]:
+                seen.add((r["job_id"], "assessment" if r["kind"] == "oa" else "interview"))
+    for r in db.rows("SELECT a.job_id, a.interview_at, a.oa_due_at, COALESCE(j.company, a.company) AS company FROM"
+                     " applications a LEFT JOIN jobs j ON j.id=a.job_id WHERE a.profile_id=? AND (a.interview_at"
+                     " BETWEEN ? AND ? OR a.oa_due_at BETWEEN ? AND ?)", (pid, now, now + 7 * 86400, now, now + 7 * 86400)):
+        if r["interview_at"] and now <= r["interview_at"] <= now + 7 * 86400 and (r["job_id"], "interview") not in seen:
+            out.append({"kind": "interview", "label": "Interview", "company": r["company"], "at": r["interview_at"],
+                        "job_id": r["job_id"]})
+        if r["oa_due_at"] and now <= r["oa_due_at"] <= now + 7 * 86400 and (r["job_id"], "assessment") not in seen:
+            out.append({"kind": "assessment", "label": "Online assessment", "company": r["company"], "at": r["oa_due_at"],
+                        "job_id": r["job_id"]})
+    return sorted(out, key=lambda x: x["at"])[:6]
 
 
 @router.get("/api/autopilot/preview")
@@ -213,8 +270,20 @@ def run_autopilot(body: dict = Body(...)):
     pid = body["profile_id"]
     if autopilot.state(pid).get("running"):
         return {"started": False, "running": True}
-    threading.Thread(target=autopilot.run, args=(pid, "manual"), daemon=True, name=f"autopilot-{pid}").start()
+    try:
+        count = max(1, min(int(body["count"]), autopilot.MAX_PER_RUN)) if body.get("count") else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "count is how many to prepare: a whole number")
+    threading.Thread(target=autopilot.run, args=(pid, "manual", count), daemon=True, name=f"autopilot-{pid}").start()
     return {"started": True}
+
+
+@router.post("/api/autopilot/tell")
+def tell_autopilot(body: dict = Body(...)):
+    out = autopilot.tell(body["profile_id"], str(body.get("text") or ""))
+    if out.get("error"):
+        raise HTTPException(400, out["error"])
+    return out
 
 
 @router.post("/api/queue/{job_id}/status")
@@ -224,8 +293,11 @@ def queue_status(job_id: str, body: dict = Body(...)):
         out = agent.call(pid, "track", {"job_id": job_id, "status": "applied"}, source="app")
         if out.get("error"):
             raise HTTPException(400, out["error"])
-    elif status == "skipped":
-        autopilot.skip(pid, job_id, body.get("reason") or "")
+    elif status == "skipped":  # from Ready to apply or straight from Matches: not_for_me queues it if it wasn't
+        from .tools import jobs as job_tools
+        out = job_tools.not_for_me(pid, job_id, body.get("reason") or "")
+        if out.get("error"):
+            raise HTTPException(404, out["error"])
     elif status == "ready":
         with db.tx() as c:
             c.execute("UPDATE ready_queue SET status='ready', skip_reason=NULL, note=NULL, updated_at=? WHERE"
@@ -236,6 +308,23 @@ def queue_status(job_id: str, body: dict = Body(...)):
 
 
 # --- Activity -----------------------------------------------------------------------------------------------
+
+@router.post("/api/agent/call")
+def agent_call(request: Request, body: dict = Body(...)):
+    """A tool call from a run on your Claude Code or ChatGPT (mcp_proxy), answered here where everything is loaded.
+    Only with that run's ticket, and only the tools the run was given."""
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    pid, name = auth.check_ticket(token), str(body.get("tool") or "")
+    if not pid:
+        raise HTTPException(401, "this run's ticket has expired")
+    if name not in auth.ticket_tools(token) and not (name in agent.TOOLS and auth.is_connection(token)):
+        raise HTTPException(403, f"this run can't use {name}")
+    out = agent.call(pid, name, body.get("args") or {}, source=str(body.get("source") or "mcp")[:40],
+                     run_id=(str(body["run_id"])[:40] if body.get("run_id") else None))
+    out.pop("_card", None)
+    out.pop("_undo", None)
+    return out
+
 
 @router.get("/api/activity")
 def get_activity(profile_id: int, all: bool = False):

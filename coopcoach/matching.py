@@ -9,7 +9,7 @@ import time
 
 from .textutil import skill_categories
 
-SUPPORT_RE = re.compile(r"help ?desk|service desk|desktop support|it support|technical support|technician|"
+SUPPORT_RE = re.compile(r"help ?desk|service desk|desktop support|endpoint support|it support|technical support|technician|"
                         r"data entry|administrative|receptionist", re.I)
 _SEASON_START = {"Winter": 1, "Spring": 5, "Summer": 5, "Fall": 9}
 
@@ -48,6 +48,7 @@ WORK_AUTH = {
     "Other": "Other / will need sponsorship",
 }
 _HOME = {"US": "US", "F1": "US", "Canadian": "Canada", "Intl-CA": "Canada"}
+_ANY_REMOTE = re.compile(r"\s*(100%\s*|fully\s*)?remote(\s*[-/,]?\s*(homebased|worker|globally|worldwide|anywhere|nationwide|opportunity))?\s*$", re.I)
 
 
 def merged_prefs(prefs: dict | None) -> dict:
@@ -105,8 +106,10 @@ def score(job: dict, profile: dict, prefs: dict, now: float | None = None) -> tu
     us_student = auth == "F1"  # already in the US; internships run on CPT/OPT without employer sponsorship
     us_open = (prefs.get("us_open", True) or us_student) and not us_person
     home = _HOME.get(auth)
-    if home and "Remote" in regions and len(regions) == 2 and ({"US", "Canada"} & regions) and home not in regions:
-        regions = regions - {"Remote"}  # "Remote, US" usually means remote within the US
+    if home and "Remote" in regions and len(regions) == 2 and ({"US", "Canada", "Other"} & regions) and home not in regions:
+        regions = regions - {"Remote"}  # "Remote, US" usually means remote within the US; "Remote (IN)" within India
+    if home == "Canada" and regions == {"Remote"} and not any(_ANY_REMOTE.match(x) for x in job.get("locations") or []):
+        regions = {"Other"}  # "Colombia, Remote", "Remote-MO", "Remote in UK": remote from somewhere else
     want = [l for l in prefs.get("locations") or [] if l]
     locs_text = " ".join(job.get("locations") or []).lower()
     if not want or "Anywhere" in want:
@@ -168,10 +171,9 @@ def score(job: dict, profile: dict, prefs: dict, now: float | None = None) -> tu
         total -= 15
         reasons.append({"t": "Term already started", "k": "bad"})
 
-    # help-desk / IT-support style roles rarely move the needle for experienced students
-    if SUPPORT_RE.search(job.get("title") or "") and \
-            ((profile.get("coop_terms_completed") or 0) >= 1 or (profile.get("year_of_study") or 0) >= 3):
-        total -= 12
+    # help-desk / IT-support style roles rarely move the needle for experienced students, and shouldn't top anyone's list
+    if SUPPORT_RE.search(job.get("title") or ""):
+        total -= 12 if (profile.get("coop_terms_completed") or 0) >= 1 or (profile.get("year_of_study") or 0) >= 3 else 6
         reasons.append({"t": "Support/helpdesk role", "k": "info"})
 
     # what they're aiming for

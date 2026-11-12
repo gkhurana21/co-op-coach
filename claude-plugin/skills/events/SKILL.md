@@ -1,6 +1,7 @@
 ---
 name: events
 description: Find and plan career events with Co-op Coach - info sessions, hackathons, networking, coffee chats - for this week or a date range, and save the ones worth going to. Use for "events this week", "hackathons this month", "what should I go to".
+model: haiku
 ---
 
 # Events with Co-op Coach

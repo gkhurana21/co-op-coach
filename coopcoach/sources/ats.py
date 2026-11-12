@@ -1,7 +1,11 @@
 """Public job-board APIs for Greenhouse, Lever, Ashby and Workday company career sites."""
 
+import html
 import logging
+import random
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
@@ -14,7 +18,7 @@ from ..textutil import (
     parse_relative_posted,
     strip_html,
 )
-from . import client
+from . import client, pooled
 
 log = logging.getLogger(__name__)
 
@@ -47,11 +51,19 @@ def detect(url: str) -> tuple[str, str] | None:
 
 # --- Greenhouse ---------------------------------------------------------------
 
-def greenhouse(slug: str, name: str, tier: str | None, known: set[str]) -> list[dict]:
-    with client() as c:
+def _count(info: dict | None, roles: int) -> None:
+    """Every open role on the board (not just internships): how fast a company is hiring, for the startup feed."""
+    if info is not None:
+        info["roles"] = roles
+
+
+def greenhouse(slug: str, name: str, tier: str | None, known: set[str], info: dict | None = None) -> list[dict]:
+    with pooled() as c:
         r = c.get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
         r.raise_for_status()
-        jobs = [j for j in r.json().get("jobs", []) if is_internship(j.get("title", ""))]
+        listed = r.json().get("jobs", [])
+        _count(info, len(listed))
+        jobs = [j for j in listed if is_internship(j.get("title", ""))]
 
         def detail(j):
             url = j.get("absolute_url") or ""
@@ -85,14 +97,14 @@ def greenhouse(slug: str, name: str, tier: str | None, known: set[str]) -> list[
             return list(ex.map(detail, jobs))
 
 
-def greenhouse_job(url: str, source: str) -> dict | None:
+def greenhouse_job(url: str, source: str, timeout: float = 20) -> dict | None:
     """One Greenhouse posting from its board API, with the full application form."""
     slug = source.split(":", 1)[1] if ":" in source else ""
     m = re.search(r"gh_jid=(\d+)|/jobs/(\d+)", url or "")
     if not slug or not m:
         return None
     gid = m.group(1) or m.group(2)
-    with client(timeout=20) as c:
+    with client(timeout=timeout) as c:
         r = c.get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{gid}", params={"questions": "true"})
         if r.status_code != 200:
             return None
@@ -111,42 +123,82 @@ def greenhouse_form(url: str, source: str) -> tuple[str, list[str]] | None:
 
 # --- Lever --------------------------------------------------------------------
 
-def lever(slug: str, name: str, tier: str | None, known: set[str]) -> list[dict]:
-    with client() as c:
-        r = c.get(f"https://api.lever.co/v0/postings/{slug}", params={"mode": "json"})
-        r.raise_for_status()
-        out = []
-        for j in r.json():
-            cats = j.get("categories") or {}
-            title = j.get("text") or ""
-            if not is_internship(title, cats.get("commitment") or ""):
-                continue
-            desc = j.get("descriptionPlain") or strip_html(j.get("description") or "")
-            for lst in j.get("lists") or []:
-                desc += "\n" + strip_html(lst.get("content") or "")
-            locs = cats.get("allLocations") or [cats.get("location") or ""]
-            out.append({
-                "source": "lever",
-                "company": name,
-                "title": title,
-                "url": j.get("hostedUrl") or "",
-                "locations": [l for l in locs if l],
-                "terms": extract_terms(title + " " + desc[:600]),
-                "description": desc.strip(),
-                "posted_at": parse_iso(j.get("createdAt")),
-                "tier_hint": tier,
-            })
-        return out
+def _lever_post(j: dict, name: str, tier: str | None) -> dict | None:
+    cats = j.get("categories") or {}
+    title = j.get("text") or ""
+    if not is_internship(title, cats.get("commitment") or ""):
+        return None
+    desc = j.get("descriptionPlain") or strip_html(j.get("description") or "")
+    for lst in j.get("lists") or []:
+        desc += "\n" + strip_html(lst.get("content") or "")
+    locs = cats.get("allLocations") or [cats.get("location") or ""]
+    return {
+        "source": "lever",
+        "company": name,
+        "title": title,
+        "url": j.get("hostedUrl") or "",
+        "locations": [l for l in locs if l],
+        "terms": extract_terms(title + " " + desc[:600]),
+        "description": desc.strip(),
+        "posted_at": parse_iso(j.get("createdAt")),
+        "tier_hint": tier,
+    }
+
+
+_LEVER_ROW = re.compile(r'data-qa-posting-id="([\w-]+)".*?data-qa="posting-name">([^<]*)</h5>(.*?)</a>', re.S)
+_LEVER_COMMITMENT = re.compile(r'class="[^"]*\bcommitment\b[^"]*">([^<]*)<')
+_LEVER_BIG = 60  # postings on the board page above which only the internships are read in full
+
+
+def lever(slug: str, name: str, tier: str | None, known: set[str], peek: bool = False,
+          info: dict | None = None) -> list[dict]:
+    """Lever's API sends every posting with its full description in one answer: tens of megabytes (and a minute or
+    two) for a big employer. Its public board page lists the same postings with just title and commitment, so on a
+    big board the internships are picked from that and only theirs are read in full. Small boards, and boards whose
+    page can't be read (a custom careers site), use the API's full list: one quick answer. `peek` (the quick check)
+    reads in full only the internships not stored yet, and says so in info["partial"]."""
+    with pooled() as c:
+        page = c.get(f"https://jobs.lever.co/{slug}", headers={"Accept": "text/html"})
+        rows = _LEVER_ROW.findall(page.text) if page.status_code == 200 else []
+        if len(rows) <= _LEVER_BIG:
+            r = c.get(f"https://api.lever.co/v0/postings/{slug}", params={"mode": "json"})
+            r.raise_for_status()
+            _count(info, len(r.json()))
+            return [p for p in (_lever_post(j, name, tier) for j in r.json()) if p]
+        _count(info, len(rows))
+        ids = [pid for pid, title, rest in rows if is_internship(html.unescape(title), html.unescape(
+            next(iter(_LEVER_COMMITMENT.findall(rest)), "")))]
+        if peek:
+            ids = [pid for pid in ids if f"https://jobs.lever.co/{slug}/{pid}" not in known]
+            if info is not None:
+                info["partial"] = True
+
+        def one(pid):
+            for attempt in (1, 2):  # Lever's API sometimes answers 502: one more try before the board counts as failed
+                try:
+                    r = c.get(f"https://api.lever.co/v0/postings/{slug}/{pid}", params={"mode": "json"})
+                    if r.status_code == 404:  # closed since the page was read
+                        return None
+                    r.raise_for_status()
+                    return _lever_post(r.json(), name, tier)
+                except (httpx.TransportError, httpx.HTTPStatusError) as e:
+                    if attempt == 2 or (isinstance(e, httpx.HTTPStatusError) and e.response.status_code < 500):
+                        raise
+
+        with ThreadPoolExecutor(12) as ex:  # Lever's API takes a second or more per posting: read many at once
+            return [p for p in ex.map(one, dict.fromkeys(ids)) if p]
 
 
 # --- Ashby --------------------------------------------------------------------
 
-def ashby(slug: str, name: str, tier: str | None, known: set[str]) -> list[dict]:
-    with client() as c:
+def ashby(slug: str, name: str, tier: str | None, known: set[str], info: dict | None = None) -> list[dict]:
+    with pooled() as c:
         r = c.get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}")
         r.raise_for_status()
         out = []
-        for j in r.json().get("jobs", []):
+        listed = r.json().get("jobs", [])
+        _count(info, len(listed))
+        for j in listed:
             title = j.get("title") or ""
             if not (is_internship(title) or (j.get("employmentType") or "").lower() == "intern"):
                 continue
@@ -175,44 +227,146 @@ def ashby(slug: str, name: str, tier: str | None, known: set[str]) -> list[dict]
 _WD_RE = re.compile(r"https://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/([\w-]+)")
 
 
-def workday(site_url: str, name: str, tier: str | None, known: set[str], max_results: int = 120) -> list[dict]:
+# a board's own job-type filter values for internships: "Intern (Fixed Term) (Trainee)", "Co-op", "Students & Interns"
+_WD_INTERN_FACET = re.compile(r"\bintern(s|ship|ships)?\b|\bco-?ops?\b|\bstudents?\b|\btrainees?\b|\bwork terms?\b|"
+                              r"\bsummer (analyst|associate)s?\b", re.I)
+_WD_FACET_CAP = 400  # postings read through the filter: past this the board is read by searching instead
+_WD_QUERIES = ("intern", "co-op", "internship")
+_WD_GATE = threading.BoundedSemaphore(24)  # Workday requests in flight at once (per process: a sync uses a few)
+
+
+def _wd_intern_facets(data: dict) -> dict[str, list[str]]:
+    """{filter parameter: [value ids]} for the internship values in a Workday board's filters (at most two filters,
+    the ones listing the most postings)."""
+    found: dict[str, list[tuple[str, int]]] = {}
+
+    def walk(facets, param=None):
+        for f in facets or []:
+            p = f.get("facetParameter") or param
+            for v in f.get("values") or []:
+                if "values" in v:
+                    walk([v], p)
+                elif v.get("id") and _WD_INTERN_FACET.search(v.get("descriptor") or ""):
+                    found.setdefault(p, []).append((v["id"], v.get("count") or 0))
+    walk(data.get("facets"))
+    best = sorted(found.items(), key=lambda kv: -sum(n for _, n in kv[1]))[:2]
+    return {p: [i for i, _ in vals] for p, vals in best if p}
+
+
+def workday(site_url: str, name: str, tier: str | None, known: set[str], max_results: int = 120,
+            plan: dict | None = None, peek: bool = False, info: dict | None = None) -> list[dict]:
+    """A Workday board's internships. Workday's keyword search is fuzzy and stops short, so a full read runs the
+    three searches and also lists the board's own internship filter (most boards have one, and it finds many
+    internships the searches miss). It also notes which searches found anything the filter (and the other searches)
+    didn't: until the next full read, one to three days later, a sync reads only the filter and those searches. On
+    most boards that's one or two requests instead of six or more. `plan` carries this between syncs:
+    {"facets": {...}, "queries": [...], "trusted": bool (filter alone is enough), "full_by": unix time}.
+    `peek` (the quick check) reads one page: Workday lists the newest first, so that's where new internships are. It
+    sees only part of the board, which it says in info["partial"]."""
     m = _WD_RE.match(site_url)
     if not m:
         raise ValueError(f"not a Workday careers URL: {site_url}")
+    plan = plan if plan is not None else {}
     tenant, wd, site = m.groups()
     base = f"https://{tenant}.{wd}.myworkdayjobs.com"
     api = f"{base}/wday/cxs/{tenant}/{site}/jobs"
-    seen: dict[str, dict] = {}
-    with client() as c:
-        for query in ("intern", "co-op", "internship"):
-            offset = 0
-            while offset < max_results:
-                r = c.post(api, json={"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": query})
+
+    def page(query: str, offset: int, facets: dict | None = None, limit: int = 20) -> dict:
+        # a busy Workday site answers 429 or 5xx now and then: wait a moment and ask again before giving up
+        for wait in (2, 5, 12, None):
+            try:
+                with _WD_GATE:  # Workday answers "too many requests" past a few dozen at once from one computer
+                    r = c.post(api, json={"appliedFacets": facets or {}, "limit": limit, "offset": offset,
+                                          "searchText": query})
+            except httpx.TransportError:  # a timeout or dropped connection: same as a busy answer
+                if wait is None:
+                    raise
+                time.sleep(wait)
+                continue
+            if r.status_code != 429 and r.status_code < 500 or wait is None:
                 r.raise_for_status()
-                data = r.json()
-                posts = data.get("jobPostings") or []
-                for p in posts:
-                    title = p.get("title") or ""
-                    path = p.get("externalPath") or ""
-                    if not path or path in seen or not is_internship(title):
-                        continue
-                    seen[path] = {
-                        "source": "workday",
-                        "company": name,
-                        "title": title,
-                        "url": f"{base}/{site}{path}",
-                        "locations": [p.get("locationsText") or ""],
-                        "terms": extract_terms(title),
-                        "posted_at": parse_relative_posted(p.get("postedOn") or ""),
-                        "tier_hint": tier,
-                        "req_id": next((b for b in p.get("bulletFields") or [] if isinstance(b, str)
-                                        and re.fullmatch(r"[A-Za-z]{0,6}[-_]?\d[\w-]{2,24}", b)), ""),
-                    }
-                offset += 20
-                # Workday search is fuzzy: once a page has no internship titles, the rest won't either
-                if len(posts) < 20 or not any(is_internship(p.get("title") or "") for p in posts):
-                    break
-    return list(seen.values())
+                return r.json()
+            after = r.headers.get("retry-after", "")
+            time.sleep(min(float(after), 20) if after.isdigit() else wait + random.random() * wait)
+
+    def search(query: str) -> list[dict]:
+        found, offset = [], 0
+        while offset < max_results:
+            posts = page(query, offset).get("jobPostings") or []
+            found += posts
+            offset += 20
+            # Workday search is fuzzy: once a page has no internship titles, the rest won't either
+            if len(posts) < 20 or not any(is_internship(p.get("title") or "") for p in posts):
+                break
+        return found
+
+    def listing(facets: dict) -> tuple[list[dict], bool]:
+        """Every posting under the internship filter: (postings, whether that was all of them). The first page says
+        how many there are; the rest are read a few at a time."""
+        found, complete = [], True
+        for param, ids in facets.items():
+            first = page("", 0, {param: ids})
+            found += first.get("jobPostings") or []
+            total = first.get("total") or 0
+            complete = complete and total <= _WD_FACET_CAP
+            rest = range(20, min(total, _WD_FACET_CAP), 20)
+            if rest:
+                with ThreadPoolExecutor(4) as pages:
+                    for data in pages.map(lambda off: page("", off, {param: ids}), rest):
+                        found += data.get("jobPostings") or []
+        return found, complete
+
+    def by_filter() -> tuple[dict, list[dict], bool]:
+        everything = page("", 0, limit=1)
+        _count(info, everything.get("total") or 0)
+        facets = _wd_intern_facets(everything)
+        return (facets, *listing(facets)) if facets else ({}, [], False)
+
+    def interns(posts: list[dict]) -> dict[str, dict]:
+        return {p["externalPath"]: p for p in posts if p.get("externalPath") and is_internship(p.get("title") or "")}
+
+    if peek:
+        with pooled() as c:
+            posts = page("", 0, plan.get("facets") or {}).get("jobPostings") or []
+        if info is not None:
+            info["partial"] = True
+        return _wd_records(interns(posts), base, site, name, tier)
+    with pooled() as c, ThreadPoolExecutor(4) as ex:
+        if "queries" in plan and time.time() < (plan.get("full_by") or 0):  # between full reads: what's needed
+            filtered = ex.submit(listing, plan["facets"]) if plan.get("facets") else None
+            searched = interns([p for posts in ex.map(search, plan["queries"]) for p in posts])
+            fposts = filtered.result()[0] if filtered else []
+            return _wd_records({**searched, **interns(fposts)}, base, site, name, tier)
+        # a full read: each search finds roles the others miss, so run them (and the filter) at once
+        filtered = ex.submit(by_filter)
+        results = {q: interns(posts) for q, posts in zip(_WD_QUERIES, ex.map(search, _WD_QUERIES))}
+        facets, fposts, complete = filtered.result()
+    found = interns(fposts)
+    covered, needed = set(found), []
+    for q in sorted(_WD_QUERIES, key=lambda q: -len(results[q])):  # the fewest searches that find the rest
+        if results[q].keys() - covered:
+            needed.append(q)
+            covered |= results[q].keys()
+    # the next full read comes one to three days later, a different time for each board so they spread across syncs
+    plan.update(facets=facets, queries=needed, trusted=bool(facets) and complete and not needed,
+                full_by=int(time.time() + 86400 * (1 + 2 * random.random())))
+    return _wd_records({k: v for r in results.values() for k, v in r.items()} | found, base, site, name, tier)
+
+
+def _wd_records(posts: dict[str, dict], base: str, site: str, name: str, tier: str | None) -> list[dict]:
+    return [{
+        "source": "workday",
+        "company": name,
+        "title": p.get("title") or "",
+        "url": f"{base}/{site}{path}",
+        "locations": [p.get("locationsText") or ""],
+        "terms": extract_terms(p.get("title") or ""),
+        "posted_at": parse_relative_posted(p.get("postedOn") or ""),
+        "posted_text": p.get("postedOn") or "",  # "Posted 3 Days Ago": what the fingerprint compares (see store)
+        "tier_hint": tier,
+        "req_id": next((b for b in p.get("bulletFields") or [] if isinstance(b, str)
+                        and re.fullmatch(r"[A-Za-z]{0,6}[-_]?\d[\w-]{2,24}", b)), ""),
+    } for path, p in posts.items()]
 
 
 # --- SAP SuccessFactors career sites (e.g. EY, Deloitte Canada): public RSS search feed --------------
@@ -293,7 +447,7 @@ def probe_custom_site(url: str) -> tuple[str, str] | None:
     if not m:
         return None
     host = m.group(1).lower()
-    with client(timeout=15) as c:
+    with client(timeout=15, public_only=True) as c:  # a careers link someone pasted
         try:
             r = c.get(f"https://{host}/api/jobs", params={"keywords": "intern", "limit": 1})
             if r.status_code == 200 and "jobs" in r.json():
@@ -309,9 +463,9 @@ def probe_custom_site(url: str) -> tuple[str, str] | None:
     return None
 
 
-def _yc(slug, name, tier, known):
+def _yc(slug, name, tier, known, info=None):
     from . import yc
-    return yc.fetch(slug, name, tier, known)
+    return yc.fetch(slug, name, tier, known, info)
 
 
 FETCHERS = {"greenhouse": greenhouse, "lever": lever, "ashby": ashby, "workday": workday,

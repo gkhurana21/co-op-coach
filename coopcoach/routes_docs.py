@@ -1,7 +1,8 @@
-"""API for Resume Studio, cover letters, application packages, Workday logins and the chat helper."""
+"""API for Resume Studio, cover letters, application packages and the chat helper."""
 
 import json
 import logging
+import queue
 import re
 import secrets
 import shutil
@@ -9,7 +10,7 @@ import threading
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from . import (
     ai,
@@ -20,13 +21,12 @@ from . import (
     jobdetail,
     mail,
     render,
+    resume,
     store,
-    vault,
-    workday,
 )
 from . import resume_studio as rs
+from . import resume_theme as theme
 from .config import UPLOAD_DIR
-from .sources import ats
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,14 +38,6 @@ def _profile(pid: int) -> dict:
         raise HTTPException(404, "profile not found")
     return p
 
-
-def _local_only(request: Request) -> None:
-    """Secrets are only ever shown to this computer, even if the app is opened to the network."""
-    if (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost"):
-        raise HTTPException(403, "passwords can only be viewed on the computer running Co-op Coach")
-
-
-# --- master resume -----------------------------------------------------------------------------
 
 def _doc(pid: int, kind: str, job_id: str | None = None) -> dict | None:
     if job_id is None:
@@ -83,12 +75,15 @@ def build_master(pid: int, use_ai: bool = True, if_unchanged_since: int | None =
             try:
                 r, by = ai.structure_resume(p["resume_filename"], f.read_bytes(), p["resume_text"]), ai.provider()
                 r["style"] = rules["style"]  # layout detected from the file (e.g. company above title)
+                r["header"]["name"] = resume.whole_name(r["header"].get("name"), resume.name_line(p["resume_text"]))
             except Exception as e:
                 log.warning("AI resume structuring failed, using rules: %s", e)
     old = _doc(pid, "resume_master")
     if if_unchanged_since is not None and old and old["updated_at"] > if_unchanged_since:
         return rs.normalize(db.loads(old["content"], {}))  # edited while the AI was working: keep theirs
     r = r or rules
+    if not old:  # a new resume starts in the Signature look
+        r["style"] = {**(r.get("style") or {}), **theme.PRESETS["signature"]["style"]}
     if old and old["generated_by"] == "you":  # keep colours / icon choices someone already picked
         mine = (db.loads(old["content"], {}) or {}).get("style") or {}
         r["style"] = {**r.get("style", {}), **{k: v for k, v in mine.items() if k != "company_first"}}
@@ -101,7 +96,10 @@ def build_master(pid: int, use_ai: bool = True, if_unchanged_since: int | None =
 def master(pid: int) -> dict | None:
     d = _doc(pid, "resume_master")
     if d:
-        return rs.normalize(db.loads(d["content"], {}))
+        r = db.loads(d["content"], {}) or {}
+        tpl = (store.get_profile(pid) or {}).get("prefs", {}).get("resume_template", "jake")
+        r["style"] = theme.with_preset(r.get("style") if isinstance(r.get("style"), dict) else {}, tpl)
+        return rs.normalize(r)
     return build_master(pid)
 
 
@@ -111,7 +109,8 @@ def get_resume(profile_id: int):
     r = master(profile_id)
     d = _doc(profile_id, "resume_master")
     import shutil
-    return {"resume": r, "lint": rs.lint(r) if r else None, "templates": rs.TEMPLATES,
+    return {"resume": r, "lint": rs.lint(r) if r else None, "templates": rs.TEMPLATES, "theme": theme_schema(),
+            "themes": p["prefs"].get("resume_themes") or {},
             "latex_compiler": bool(shutil.which("tectonic")),
             "template": p["prefs"].get("resume_template", "jake"), "built_by": d["generated_by"] if d else None,
             "updated_at": d["updated_at"] if d else None, "ai": ai.available()}
@@ -126,6 +125,61 @@ def put_resume(body: dict = Body(...)):
     if body.get("template") in rs.TEMPLATES:
         _set_pref(pid, "resume_template", body["template"])
     return {"ok": True, "lint": rs.lint(r)}
+
+
+def theme_schema() -> dict:
+    """What the Design editor offers (fonts, presets, options), so the page and the server agree on the lists."""
+    return {"fonts": theme.FONTS, "presets": theme.PRESETS, "numbers": theme.NUMBERS, "keys": theme.THEME_KEYS,
+            "heading_styles": theme.HEADING_STYLES, "bullets": theme.BULLETS, "date_align": theme.DATE_ALIGN,
+            "density": theme.DENSITY, "rule_tints": theme.RULE_TINTS, "palette": rs.PALETTE,
+            "heading_vars": {k: theme.heading_vars(k) for k in theme.HEADING_STYLES}}
+
+
+@router.put("/api/resume/themes")
+def save_theme(body: dict = Body(...)):
+    """Save the look under a name (only the look: fonts, colours, sizes... never resume content)."""
+    pid = body["profile_id"]
+    p = _profile(pid)
+    name = re.sub(r"\s+", " ", str(body.get("name") or "")).strip()[:40]
+    if not name:
+        raise HTTPException(400, "give the theme a name")
+    st = rs.normalize({"style": body.get("style") or {}})["style"]
+    themes = dict(p["prefs"].get("resume_themes") or {})
+    if name not in themes and len(themes) >= 30:
+        raise HTTPException(400, "30 saved themes is the limit; delete one first")
+    themes[name] = {k: st[k] for k in theme.THEME_KEYS}
+    _set_pref(pid, "resume_themes", themes)
+    return {"themes": themes}
+
+
+@router.delete("/api/resume/themes")
+def delete_theme(profile_id: int, name: str):
+    p = _profile(profile_id)
+    themes = dict(p["prefs"].get("resume_themes") or {})
+    themes.pop(name, None)
+    _set_pref(profile_id, "resume_themes", themes)
+    return {"themes": themes}
+
+
+@router.post("/api/resume/theme/ai")
+def design_with_ai(body: dict = Body(...)):
+    """Design → "Describe your look": settings only; the resume's words aren't sent."""
+    ask = str(body.get("ask") or "").strip()
+    if not ask:
+        raise HTTPException(400, "Say what you'd like, e.g. clean and modern, navy headings")
+    if not ai.available():
+        raise HTTPException(400, "This needs an AI connected: Settings → AI. You can still change everything by hand.")
+    style = body.get("style") if isinstance(body.get("style"), dict) else {}
+    try:
+        return ai.design_resume(ask, style)
+    except Exception as e:
+        log.warning("AI resume design failed: %s", e)
+        raise HTTPException(502, "The AI couldn't do that just now. Try again, or change it by hand.")
+
+
+@router.get("/api/resume/theme/shuffle")
+def shuffle_theme():
+    return theme.shuffle()
 
 
 @router.post("/api/resume/lint")
@@ -264,11 +318,22 @@ def tailor(body: dict = Body(...)):
 
 
 def _resume_for(pid: int, job_id: str | None) -> dict | None:
+    m = master(pid)
     if job_id:
         d = _doc(pid, "resume", job_id)
         if d:
-            return rs.normalize(db.loads(d["content"], {}))
-    return master(pid)
+            r = rs.normalize(db.loads(d["content"], {}))
+            if m:  # a tailored copy changes the content, never the look: that follows your current theme
+                r["style"].update({k: m["style"][k] for k in theme.THEME_KEYS})
+            return r
+    return m
+
+
+@router.post("/api/resume/warm")
+def warm_pdf():
+    """The Documents page is open: have Chrome ready, so the first PDF is quick (it closes itself after 90 idle seconds)."""
+    render.warm_printer()
+    return {"ok": True}
 
 
 @router.get("/api/resume/export")
@@ -280,7 +345,7 @@ def export_resume(profile_id: int, fmt: str = "pdf", template: str = "", job_id:
     tpl = template or p["prefs"].get("resume_template", "jake")
     name = render.safe_name(r["header"].get("name") or p["name"], "Resume")
     if fmt == "docx":
-        return Response(render.resume_docx(r, level if level is not None else _fit_level(r, tpl)),
+        return Response(render.resume_docx(r, level if level is not None else _fit_level(r, tpl), tpl),
                         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         headers={"Content-Disposition": f'attachment; filename="{name}.docx"'})
     if fmt == "html":
@@ -346,11 +411,15 @@ def _set_pref(pid: int, key: str, value) -> None:
         c.execute("UPDATE profiles SET prefs_json=? WHERE id=?", (db.dumps(prefs), pid))
 
 
-def generate_letter(pid: int, job_id: str, format_id: str | None = None, use_ai: bool = True) -> dict:
+def generate_letter(pid: int, job_id: str, format_id: str | None = None, use_ai: bool = True, quick: bool = False) -> dict:
+    """quick: right now, from what's already stored (no AI, nothing fetched), for the polish queue to improve on."""
     p = _profile(pid)
     job = _job(job_id, pid)
     fmt = coverletter.get_format(pid, format_id or p["prefs"].get("letter_format", "classic"))
-    desc = jobdetail.ensure_description(job_id) if not job_id.startswith("ext:") else ""
+    if quick:
+        use_ai, desc = False, (db.row("SELECT description FROM jobs WHERE id=?", (job_id,)) or {}).get("description") or ""
+    else:
+        desc = jobdetail.ensure_description(job_id) if not job_id.startswith("ext:") else ""
     yc = companies.yc_lookup(job["company"])
     resume = master(pid) or {}
     text, by = None, "rules"
@@ -533,7 +602,7 @@ def package_download(profile_id: int, job_id: str):
     fit: dict = {}
     files = {
         f"{who}_Resume_{comp}.pdf": render.pdf(render.resume_html(r, tpl), fit),
-        f"{who}_Resume_{comp}.docx": render.resume_docx(r, int(fit.get("level") or 0)),
+        f"{who}_Resume_{comp}.docx": render.resume_docx(r, int(fit.get("level") or 0), tpl),
         f"{who}_Resume_{comp}.tex": render.resume_latex(r, _tex_level(r)),  # Jake's template, opens in Overleaf
         f"{who}_Cover-Letter_{comp}.pdf": render.pdf(render.letter_html(letter["content"], r["header"], tpl)),
         f"{who}_Cover-Letter_{comp}.docx": render.letter_docx(letter["content"], r["header"]),
@@ -543,177 +612,6 @@ def package_download(profile_id: int, job_id: str):
     zname = render.safe_name(who, comp, "application")
     return Response(render.package_zip(files), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{zname}.zip"'})
-
-
-# --- Workday logins ------------------------------------------------------------------------------------
-
-_portal_check_running: set[int] = set()
-
-
-@router.get("/api/portals")
-def portals(profile_id: int):
-    workday.ensure_default_accounts(profile_id)
-    accts = db.rows("SELECT id, kind, site_url, company, username, last_check, last_status, needs_manual, created_at,"
-                    " uses_default FROM portal_accounts WHERE profile_id=? ORDER BY company", (profile_id,))
-    for a in accts:
-        a["signin"] = workday.manual_state(a["id"])
-    have = {a["site_url"] for a in accts}
-    # Workday sites behind applications you're tracking, so you can add those logins in one click
-    sugg = {}
-    for r in db.rows("SELECT j.company, j.url FROM applications a JOIN jobs j ON j.id=a.job_id WHERE a.profile_id=?"
-                     " AND j.url LIKE '%myworkdayjobs.com%'", (profile_id,)):
-        found = ats.detect(r["url"])
-        if found and found[1] not in have:
-            sugg[found[1]] = r["company"]
-    return {"accounts": accts, "suggestions": [{"site_url": k, "company": v} for k, v in sugg.items()],
-            "default_login": workday.default_login(profile_id),
-            "available": workday.available(), "vault": vault.available(), "vault_backend": vault.backend_name(),
-            "checking": profile_id in _portal_check_running}
-
-
-@router.post("/api/portals/generate-password")
-def gen_password():
-    return {"password": vault.generate_password()}
-
-
-def _confirm_it_is_you(pid: int, request: Request) -> None:
-    """Re-check the passcode before handing out a saved password (local browser only)."""
-    _local_only(request)
-    from . import auth
-    if auth.has_passcode(pid):
-        wait = auth.wait_seconds(pid)
-        if wait:
-            raise HTTPException(429, f"Too many wrong tries. Wait {wait}s.")
-        if not auth.verify(pid, request.headers.get("x-passcode", "")):
-            raise HTTPException(403, "Enter your passcode to copy saved passwords")
-
-
-@router.put("/api/portals/default")
-def set_default_login(body: dict = Body(...)):
-    pid, user = body["profile_id"], (body.get("username") or "").strip()
-    if "@" not in user:
-        raise HTTPException(400, "Enter the email you use for Workday accounts")
-    if not vault.available():
-        raise HTTPException(400, "No secure credential store found on this computer, so passwords can't be saved.")
-    try:
-        workday.set_default_login(pid, user, body.get("password") or None)
-    except ValueError:
-        raise HTTPException(400, "Enter the password too")
-    return {"ok": True, "added": workday.ensure_default_accounts(pid)}
-
-
-@router.delete("/api/portals/default")
-def clear_default_login(profile_id: int):
-    workday.clear_default_login(profile_id)
-    return {"ok": True}
-
-
-@router.get("/api/portals/default/password")
-def reveal_default_password(profile_id: int, request: Request):
-    _confirm_it_is_you(profile_id, request)
-    pw = vault.get(vault.workday_default_key(profile_id))
-    if pw is None:
-        raise HTTPException(404, "not found in the Keychain")
-    return {"password": pw}
-
-
-@router.post("/api/portals")
-def add_portal(body: dict = Body(...)):
-    pid = body["profile_id"]
-    found = ats.detect(body.get("url") or "")
-    if not found or found[0] != "workday":
-        raise HTTPException(400, "Paste the company's Workday careers link (….myworkdayjobs.com/…). Any job link from "
-                                 "that site works.")
-    site = found[1]
-    user, pw = (body.get("username") or "").strip(), body.get("password") or ""
-    shared = bool(body.get("use_default")) and bool(workday.default_login(pid))
-    if shared:
-        user = workday.default_login(pid)
-    elif not user or not pw:
-        raise HTTPException(400, "email and password required")
-    if not vault.available():
-        raise HTTPException(400, "No secure credential store found on this computer, so passwords can't be saved.")
-    company = (body.get("company") or "").strip() or site.split("//")[1].split(".")[0].upper()
-    if not shared:
-        vault.put(vault.workday_key(pid, site, user), pw)
-    workday.skip_site(pid, site, False)
-    with db.tx() as c:
-        c.execute("INSERT INTO portal_accounts (profile_id, kind, site_url, company, username, created_at, uses_default)"
-                  " VALUES (?,?,?,?,?,?,?) ON CONFLICT(profile_id, site_url, username) DO UPDATE SET"
-                  " company=excluded.company, needs_manual=0, last_status=NULL, uses_default=excluded.uses_default",
-                  (pid, "workday", site, company, user, db.now(), int(shared)))
-    return {"ok": True, "site_url": site}
-
-
-@router.get("/api/portals/{aid}/password")
-def reveal_password(aid: int, request: Request):
-    a = db.row("SELECT * FROM portal_accounts WHERE id=?", (aid,))
-    if not a:
-        raise HTTPException(404)
-    _confirm_it_is_you(a["profile_id"], request)
-    pw = workday.password_for(a) or None
-    if pw is None:
-        raise HTTPException(404, "not found in the Keychain")
-    return {"password": pw}
-
-
-@router.put("/api/portals/{aid}")
-def update_portal(aid: int, body: dict = Body(...)):
-    a = db.row("SELECT * FROM portal_accounts WHERE id=?", (aid,))
-    if not a:
-        raise HTTPException(404)
-    own = bool(body.get("password"))  # a site-specific password takes this site off the shared login
-    if own:
-        vault.put(vault.workday_key(a["profile_id"], a["site_url"], a["username"]), body["password"])
-    with db.tx() as c:
-        c.execute("UPDATE portal_accounts SET company=COALESCE(?, company), needs_manual=0,"
-                  " uses_default=CASE WHEN ? THEN 0 ELSE uses_default END WHERE id=?",
-                  (body.get("company"), int(own), aid))
-    return {"ok": True}
-
-
-@router.delete("/api/portals/{aid}")
-def delete_portal(aid: int):
-    a = db.row("SELECT * FROM portal_accounts WHERE id=?", (aid,))
-    if a:
-        if a["uses_default"]:  # the shared password stays; just don't re-add this site from your applications
-            workday.skip_site(a["profile_id"], a["site_url"])
-        else:
-            vault.delete(vault.workday_key(a["profile_id"], a["site_url"], a["username"]))
-        shutil.rmtree(workday.PROFILES / f"workday-{aid}", ignore_errors=True)
-    with db.tx() as c:
-        c.execute("DELETE FROM portal_accounts WHERE id=?", (aid,))
-    return {"ok": True}
-
-
-@router.post("/api/portals/check")
-def check_portals(body: dict = Body(...)):
-    pid = body["profile_id"]
-    if not workday.available():
-        raise HTTPException(400, "Workday checks need the playwright package: .venv/bin/pip install playwright")
-    if pid in _portal_check_running:
-        return {"started": False}
-    _portal_check_running.add(pid)
-
-    def run():
-        try:
-            workday.check_all(pid)
-        finally:
-            _portal_check_running.discard(pid)
-
-    threading.Thread(target=run, daemon=True).start()
-    return {"started": True}
-
-
-@router.post("/api/portals/{aid}/signin")
-def portal_signin(aid: int):
-    workday.manual_sign_in(aid)
-    return {"state": workday.manual_state(aid)}
-
-
-@router.get("/api/portals/{aid}/signin")
-def portal_signin_state(aid: int):
-    return {"state": workday.manual_state(aid)}
 
 
 # --- agent tools + apply assistant ---------------------------------------------------------------------------
@@ -781,6 +679,23 @@ def _rules_reply(pid: int, msg: str) -> str:
     m = msg.lower()
     st = c["stats"]
     fmt_job = lambda j: f"• {j['company']}: {j['title']} ({j['score']}%) {j['url']}"  # noqa: E731
+    if re.search(r"\bpath\b|streak|\bxp\b|\blevel\b|daily goal|leetcode|coding problem|lesson", m):
+        from . import path
+        s = path.summary(pid)
+        lv = s["level"]
+        nxt = s["next_steps"][:3]
+        return (f"🔥 {s['streak']}-day streak (best {s['best_streak']}) · {s['today']}/{s['goal']} XP today · level "
+                f"{lv['level']}, {lv['name']}" + (f" ({lv['to'] - lv['xp']} XP to {lv['next_name']})" if lv["to"] else "")
+                + ".\n" + ("Next on your Path:\n" + "\n".join(f"• {t}" for t in nxt) + "\n" if nxt else "")
+                + "Open Today → 🏆 Path for your NeetCode 150 and where you're at.")
+    if re.search(r"startup|\byc\b|y combinator", m):
+        from . import startups
+        d = startups.feed(pid, "waterloo", hiring=True, limit=5)
+        if not d["startups"]:
+            return "No Waterloo startups hiring right now that I know of. Jobs → 🚀 Startups shows Toronto and Canada too."
+        return ("Startups hiring in Waterloo Region, fastest first:\n" + "\n".join(
+            f"• {r['name']}: {r['one_liner'] or r['where']}" + (f" ({r['open']} open)" if r["open"] else "")
+            for r in d["startups"]) + "\nMore (Toronto, Canada) in Jobs → 🚀 Startups.")
     if re.search(r"how many|stats|count|applied|rejection|interview|offer|status|progress", m):
         if not st["applied_total"]:
             return ("You haven't tracked any applications yet. Use the Track… menu on a posting, add one by hand on the "
@@ -789,6 +704,17 @@ def _rules_reply(pid: int, msg: str) -> str:
                 f"{st['interviewing']} interviewing, {st['offer']} offers, {st['rejected']} rejections "
                 f"(response rate {st['response_rate']}%)."
                 + (f" {st['stale']} have been quiet for 3+ weeks; worth a follow-up." if st["stale"] else ""))
+    if re.search(r"devpost|submi\w* (my|our|the) (project|hack)|hackathon (submission|project|write.?up)", m):
+        return ("After a hackathon: Events → Hackathons → 🏁 Submit (or 🏁 Submit project on the tracker). Paste your "
+                "project's public GitHub link and I write the Devpost submission from its README and what it's built "
+                "with: the elevator pitch, Devpost's sections, the Built with tags and a two-minute demo script, with "
+                "[brackets] for what only your team knows. Then one click puts it on your resume.")
+    if re.search(r"(apply|application|register|sign up)\w* (to|for) (a |the )?hackathon|hackathon (application|apply)"
+                 r"|apply to (hack|uofthacks|hackthe)", m):
+        return ("Events → Hackathons → 📝 Apply on any of them: your details from your resume, the usual short answers "
+                "drafted from your real projects, and your t-shirt and dietary answers remembered. Download it, or let "
+                "me fill the form in Chrome. You tick MLH's boxes and press Submit, then ✓ I applied puts it on your "
+                "tracker.")
     if re.search(r"event|coffee|network|info session|career fair|hackathon|meetup", m):
         if not c["events"]:
             return "No upcoming career events yet. Add your career centre's calendar on the Events tab."
@@ -808,7 +734,7 @@ def _rules_reply(pid: int, msg: str) -> str:
     if re.search(r"best|top|match|recommend|apply|should i|which", m):
         return "Your strongest open matches:\n" + "\n".join(fmt_job(j) for j in c["jobs"][:5])
     if re.search(r"workday|password|login", m):
-        return "Save company Workday logins under Applications → Workday logins. Passwords go to your Mac's Keychain."
+        return "Sign in to company sites yourself. Connect your inbox in Settings → Inbox for application updates."
     return ("I can tell you about your applications, best matches, new postings, upcoming events, your resume score "
             "or cover letters. Try “what should I apply to?” or “how many interviews do I have?”"
             + ("" if ai.available() else "\n(Add a free Groq key in .env for full conversations.)"))
@@ -824,8 +750,49 @@ def application_from_email(body: dict = Body(...)):
     return out
 
 
+@router.post("/api/chat/warm")
+def chat_warm(body: dict = Body(...)):
+    """The chat was opened: have Claude Code ready before the first message."""
+    from . import ai, claude_chat
+    if ai.provider() == "claude_code":
+        claude_chat.warm(int(body["profile_id"]))
+    return {"ok": True}
+
+
+@router.post("/api/chat/stream")
+def chat_stream(body: dict = Body(...)):
+    """The chat, as it's written: one JSON object a line (delta, step, then done with everything /api/chat returns)."""
+    said = [m for m in body.get("messages") or [] if m.get("role") in ("user", "assistant") and m.get("content")]
+    if "profile_id" not in body or not said or said[-1]["role"] != "user":  # (checked now: after this, the reply has begun)
+        raise HTTPException(400, "send a user message")
+    out: queue.Queue = queue.Queue()
+
+    def work():
+        try:
+            out.put({"t": "done", "v": _chat_turn(body, lambda kind, v: out.put({"t": kind, "v": v}))})
+        except HTTPException as e:
+            out.put({"t": "error", "v": str(e.detail)})
+        except Exception as e:
+            log.warning("chat failed: %s", e)
+            out.put({"t": "error", "v": str(e)[:300]})
+        out.put(None)
+    threading.Thread(target=work, daemon=True, name="chat").start()
+
+    def lines():
+        while True:
+            item = out.get()
+            if item is None:
+                return
+            yield json.dumps(item, ensure_ascii=False, default=str) + "\n"
+    return StreamingResponse(lines(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+
 @router.post("/api/chat")
 def chat(body: dict = Body(...)):
+    return _chat_turn(body)
+
+
+def _chat_turn(body: dict, on_event=None) -> dict:
     pid = body["profile_id"]
     history = [{"role": m["role"], "content": str(m["content"])[:10000]} for m in body.get("messages", [])
                if m.get("role") in ("user", "assistant") and m.get("content")]
@@ -834,9 +801,14 @@ def chat(body: dict = Body(...)):
     if ai.available() and body.get("focus") != "resume":  # the main chat is an agent that can act
         from . import agent
         try:
-            return agent.run(pid, history)
+            return agent.run(pid, history, on_event=on_event)
         except Exception as e:
             log.warning("agent chat failed, falling back: %s", e)
+    elif body.get("focus") != "resume":  # with no AI connected, the exact requests still get a real answer
+        from . import quick_chat
+        quick = quick_chat.answer(pid, history[-1]["content"])
+        if quick:
+            return quick
     if ai.available():
         c = _chat_context(pid)
         p = c["p"]

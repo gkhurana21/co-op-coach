@@ -5,7 +5,8 @@
 //
 // The token is a long random secret made in the app (Events → Add to my calendar). Only its SHA-256 is stored
 // (profiles.prefs_json.calendar_token_hash), so the database never holds the link itself. The feed has the events
-// the person saved (⭐ / ✅) and the interview times / online-assessment deadlines they added in Applications.
+// the person saved (⭐ / ✅), the interviews, assessment deadlines, coffee chats and info sessions found in their email
+// (calendar_items), the interview times / deadlines they added in Applications, and their reminders, each with an alarm.
 import postgres from "npm:postgres@3.4.5";
 
 const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { prepare: false, max: 2, idle_timeout: 20 });
@@ -15,7 +16,13 @@ async function sha256hex(s: string): Promise<string> {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const esc = (s: string) => (s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const esc = (s: string) => (s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
+
+// only http(s) links, and no line breaks or other control characters that would add lines to the feed
+function link(u?: string): string {
+  const s = (u || "").replace(/[\x00-\x1f\x7f]/g, "");
+  return /^https?:\/\//i.test(s) ? s : "";
+}
 
 function stamp(ts: number, allDay: boolean): string {
   const d = new Date(ts * 1000).toISOString();
@@ -49,7 +56,8 @@ function ics(items: Item[], name: string): string {
     if (e.location) lines.push(`LOCATION:${esc(e.location)}`);
     const desc = [e.url || "", e.description || ""].filter(Boolean).join("\n").slice(0, 900);
     if (desc) lines.push(`DESCRIPTION:${esc(desc)}`);
-    if (e.url && /^https?:\/\//.test(e.url)) lines.push(`URL:${e.url}`);
+    const url = link(e.url);
+    if (url) lines.push(`URL:${url}`);
     lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(e.title)}`, `TRIGGER:${e.alarm}`, "END:VALARM", "END:VEVENT");
   }
   lines.push("END:VCALENDAR");
@@ -82,12 +90,34 @@ Deno.serve(async (req) => {
         end: Number(e.end_ts) || start + (allDay ? 86400 : 3600), allDay, location: e.location || "", url: e.url || "",
         description: (e.description || "").slice(0, 600), alarm: "-P1D" };
     });
+    // interviews, assessments, coffee chats and info sessions found in email (the app keeps only the item, not the email)
+    const covered = new Set<string>();
+    const ALARM: Record<string, string> = { interview: "-PT1H", oa: "-P1D", recruiter_call: "-PT30M", coffee_chat: "-PT30M",
+      info_session: "-PT1H", career_fair: "-P1D", other: "-PT30M" };
+    const MINUTES: Record<string, number> = { interview: 60, oa: 30, recruiter_call: 30, coffee_chat: 30, info_session: 60,
+      career_fair: 180, other: 30 };
+    try {
+      const mine = await sql`select id, kind, title, start_ts, end_ts, due_ts, all_day, location, join_url, book_url,
+                               email_link, who, email_subject, job_id from coopcoach.calendar_items
+                             where profile_id = ${pid} and status = 'confirmed'
+                               and coalesce(start_ts, due_ts) >= ${since}`;
+      for (const c of mine) {
+        const due = c.start_ts == null, start = Number(c.start_ts ?? c.due_ts), allDay = !!Number(c.all_day);
+        items.push({ uid: `item-${c.id}`, title: due ? `${c.title} (due)` : c.title, start,
+          end: Number(c.end_ts) || start + (due ? 1800 : (MINUTES[c.kind] ?? 30) * 60), allDay,
+          location: c.location || "", url: c.join_url || c.book_url || c.email_link || "",
+          description: [c.who, c.email_subject].filter(Boolean).join(" · "), alarm: ALARM[c.kind] ?? "-PT30M" });
+        if (c.job_id) covered.add(`${c.kind === "oa" ? "oa" : "interview"}-${c.job_id}`);
+      }
+    } catch (e) {
+      console.error("calendar items skipped", e);  // an older database without the table still serves the rest
+    }
     for (const a of apps) {
-      if (Number(a.interview_at) >= since) {
+      if (Number(a.interview_at) >= since && !covered.has(`interview-${a.job_id}`)) {
         items.push({ uid: `interview-${a.job_id}`, title: `Interview: ${a.company} · ${a.title}`, start: Number(a.interview_at),
           end: Number(a.interview_at) + 3600, allDay: false, url: a.url || "", alarm: "-PT1H" });
       }
-      if (Number(a.oa_due_at) >= since) {
+      if (Number(a.oa_due_at) >= since && !covered.has(`oa-${a.job_id}`)) {
         items.push({ uid: `oa-${a.job_id}`, title: `Online assessment due: ${a.company} · ${a.title}`,
           start: Number(a.oa_due_at), end: Number(a.oa_due_at) + 1800, allDay: false, url: a.url || "", alarm: "-P1D" });
       }

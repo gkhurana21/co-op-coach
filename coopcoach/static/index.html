@@ -4,13 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Co-op Coach</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><path d='M9 13h14v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z' fill='white'/><path d='M13 13v-2a3 3 0 0 1 6 0v2' stroke='white' stroke-width='2' fill='none'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%235cf2b0'/><path d='M9 13h14v10a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z' fill='%2304140d'/><path d='M13 13v-2a3 3 0 0 1 6 0v2' stroke='%2304140d' stroke-width='2' fill='none'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/phosphor.css">
+  <link rel="stylesheet" href="/static/design.css">
+  <meta name="theme-color" content="#0b0e10">
   <script>try { if (localStorage.getItem("cc.theme") === '"light"') document.documentElement.dataset.theme = "light"; } catch (e) { /* private mode */ }</script>
 </head>
 <body>
+  <div id="busy" aria-hidden="true"></div>
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
@@ -25,6 +30,9 @@
         <span id="sync-status" class="muted small"></span>
         <button id="theme-btn" class="btn btn-ghost btn-sm" title="Switch between black and light">☀︎</button>
         <button id="lock-btn" class="btn btn-ghost btn-sm hidden" title="Lock this profile">🔒 Lock</button>
+        <button id="settings-btn" class="btn btn-ghost btn-sm" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
         <button id="sync-btn" class="btn btn-ghost btn-sm" title="Pull new postings now">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
           Sync
@@ -32,32 +40,41 @@
       </div>
     </div>
     <nav class="tabs" id="tabs">
-      <button data-tab="autopilot" class="active">Autopilot <span class="count" id="ready-count"></span></button>
-      <button data-tab="matches">Matches</button>
-      <button data-tab="tracker">Applications <span class="count" id="app-count"></span></button>
-      <button data-tab="documents">Documents</button>
-      <button data-tab="events">Events</button>
-      <button data-tab="settings">Settings</button>
+      <button data-group="today" class="active">Today <span class="count" id="ready-count"></span></button>
+      <button data-group="jobs" title="Matches, and your tracks: kinds of role and of employer, each with its postings, companies and market">Jobs</button>
+      <button data-group="apps" title="Your applications and documents">Applications <span class="count" id="app-count"></span></button>
+      <button data-group="people" class="hidden" title="Recruiters, your LinkedIn connections and people you added, by company">People</button>
+      <button data-group="events">Calendar</button>
     </nav>
+    <nav class="subtabs hidden" id="subnav" aria-label="Section"></nav>
   </header>
 
   <main id="main"></main>
 
   <div id="modal-root"></div>
-  <button id="chat-fab" class="chat-fab hidden" title="Ask Co-op Coach" aria-label="Open chat">
+  <button id="chat-fab" class="chat-fab dock hidden" title="Ask Jarvis, your co-op coach" aria-label="Open chat with Jarvis">
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01" stroke-linecap="round" stroke-width="3"/></svg>
     <span class="chat-dot hidden" id="chat-dot"></span>
   </button>
   <section id="chat-panel" class="chat-panel hidden" aria-label="Co-op Coach chat">
-    <header><div><b>Co-op Coach</b><div class="muted small" id="chat-mode"></div></div><button class="icon-btn" id="chat-close" aria-label="Close chat">✕</button></header>
+    <header><div class="chat-who"><span class="chat-avatar" id="chat-avatar"></span><div><b class="chat-name">Jarvis</b><div class="muted small" id="chat-mode"></div></div></div><button class="icon-btn" id="chat-close" aria-label="Close chat">✕</button></header>
     <div class="chat-log" id="chat-log"></div>
     <div class="chat-suggest" id="chat-suggest"></div>
     <form id="chat-form"><textarea id="chat-input" rows="1" placeholder="Ask anything, or paste a recruiter email…" autocomplete="off"></textarea><button class="btn btn-sm">Send</button></form>
   </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/jarvis.js"></script>
   <script src="/static/docs.js"></script>
+  <script src="/static/design.js"></script>
   <script src="/static/autopilot.js"></script>
   <script src="/static/settings.js"></script>
+  <script src="/static/fit.js"></script>
+  <script src="/static/tracks.js"></script>
+  <script src="/static/path.js"></script>
+  <script src="/static/recruiters.js"></script>
+  <script src="/static/hackathons.js"></script>
+  <script src="/static/board.js"></script>
+  <script src="/static/calendar.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

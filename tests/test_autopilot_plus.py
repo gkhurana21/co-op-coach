@@ -8,6 +8,7 @@ Run: .venv/bin/python -m tests.test_autopilot_plus
 import json
 import os
 import tempfile
+import time
 from datetime import datetime, timedelta
 
 TMP = tempfile.mkdtemp(prefix="coopcoach-aptest-")
@@ -54,11 +55,11 @@ def main():
     pid, ids = seed()
     checks = {}
 
-    cfg = autopilot.save_settings(pid, {"days": [0, 9, 2], "time": "25:99", "per_day": 40, "min_score": -5,
+    cfg = autopilot.save_settings(pid, {"days": [0, 9, 2], "time": "25:99", "per_day": 400, "min_score": -5,
                                         "eligibility": "weird", "fill_with": "claude_code", "mix": {"bigtech": 2, "x y": 1},
                                         "paused_until": "not-a-date", "blocklist": ["  Cohere ", ""]})
     checks["settings are checked: bad days/times/numbers are fixed or ignored"] = cfg["days"] == [0, 2] and \
-        cfg["time"] == "08:00" and cfg["per_day"] == 10 and cfg["min_score"] == 0 and cfg["eligibility"] == "any"
+        cfg["time"] == "08:00" and cfg["per_day"] == autopilot.MAX_PER_RUN and cfg["min_score"] == 0 and cfg["eligibility"] == "any"
     checks["...and good ones stick"] = cfg["fill_with"] == "claude_code" and cfg["mix"] == {"bigtech": 2} and \
         cfg["blocklist"] == ["Cohere"] and cfg["paused_until"] == ""
 
@@ -98,6 +99,13 @@ def main():
         "SELECT 1 FROM ready_queue WHERE job_id=?", (ids["Wealthsimple"],)) else None
     if db.row("SELECT 1 FROM ready_queue WHERE job_id=?", (ids["Wealthsimple"],)):
         checks["'Not for me: that company' adds it to the blocklist"] = "Wealthsimple" in autopilot.settings(pid)["blocklist"]
+
+    from coopcoach import routes_auto
+    loose = next(j for j in ids.values() if not db.row("SELECT 1 FROM ready_queue WHERE job_id=?", (j,)))
+    routes_auto.queue_status(loose, {"profile_id": pid, "status": "skipped", "reason": "role"})
+    row = db.row("SELECT status, skip_reason FROM ready_queue WHERE profile_id=? AND job_id=?", (pid, loose))
+    checks["'Not for me' straight from Matches (never prepared) is kept and learned from"] = bool(row) and \
+        row["status"] == "skipped" and row["skip_reason"] == "role"
 
     with db.tx() as c:
         c.execute("UPDATE jobs SET active=0 WHERE id=?", (ids["Shopify"],))
@@ -185,11 +193,55 @@ def main():
     checks["company mix puts its quota first"] = picks and picks[0]["tier"] == "bigtech"
     lines = autopilot.weekly_recap(pid)
     checks["weekly recap sums up the week"] = lines[0].startswith("Applied:")
+    today(pid, ids, checks)
 
     for name, ok in checks.items():
         print(("PASS " if ok else "FAIL ") + name)
     print(f"\n{sum(map(bool, checks.values()))}/{len(checks)} passed")
     raise SystemExit(0 if all(map(bool, checks.values())) else 1)
+
+
+def today(pid, ids, checks):
+    """Today: Jarvis's plan read from plain words, a filter for the kind of company, and a run of any size."""
+    t = autopilot.parse_tell("15 a day, only startups in Toronto and Remote, skip Amazon and Meta, at least 75, weekdays at 9am")
+    checks["Tell Jarvis: plain words become the plan (how many, kind of company, places, never, score, days, time)"] = t == {
+        "per_day": 15, "tiers": ["startup", "yc"], "locations": ["Toronto", "Remote"], "blocklist": ["Amazon", "Meta"],
+        "min_score": 75, "days": [0, 1, 2, 3, 4], "time": "09:00"}
+    checks["...the vibe words too (chill 3, steady 10, all in 25), and it can switch Autopilot on or off"] = [
+        autopilot.parse_tell(x).get("per_day") for x in ("make it chill", "steady please", "go all in")] == [3, 10, 25] \
+        and autopilot.parse_tell("turn it on")["on"] is True and autopilot.parse_tell("stop")["on"] is False
+    out = autopilot.tell(pid, "prepare 30 a day for big tech")
+    checks["...and saves only what it was told to change, up to 50 a run"] = out["changed"] == {
+        "per_day": 30, "tiers": ["bigtech"]} and autopilot.tell(pid, "200 a day")["settings"]["per_day"] == 50
+    checks["...and says so when nothing in the words is a change"] = "error" in autopilot.tell(pid, "hello jarvis")
+    autopilot.save_settings(pid, {"blocklist": []})
+    autopilot.tell(pid, "skip Amazon")
+    checks["...\"skip\" adds to the companies already skipped, once each"] = autopilot.tell(pid, "skip Meta and Amazon")[
+        "settings"]["blocklist"] == ["Amazon", "Meta"]
+    autopilot.save_settings(pid, {"tiers": ["bigtech"], "mix": {}, "blocklist": [], "min_score": 0, "eligibility": "any",
+                                  "locations": [], "categories": [], "terms": [], "posted_within": 0})
+    # what earlier runs prepared depends on how ties sort (SQLite and Postgres differ): start from an empty queue
+    queued = db.rows("SELECT * FROM ready_queue WHERE profile_id=?", (pid,))
+    with db.tx() as c:
+        c.execute("DELETE FROM ready_queue WHERE profile_id=?", (pid,))
+    picks = autopilot.candidates(pid, limit=10)
+    checks["a kind-of-company filter keeps only those companies"] = picks and {p["tier"] for p in picks} == {"bigtech"}
+    with db.tx() as c:  # put the queue back for the checks after this one
+        for r in queued:
+            c.execute(f"INSERT INTO ready_queue ({', '.join(r)}) VALUES ({', '.join('?' * len(r))})", list(r.values()))
+    autopilot.save_settings(pid, {"tiers": [], "per_day": 1, "prerender": False, "tailor": False, "letter": False})
+    with db.tx() as c:
+        c.execute("DELETE FROM ready_queue WHERE profile_id=?", (pid,))
+    store.upsert_jobs([store.normalize(job(co, "Software Engineer Intern", "Toronto, ON", "Python and Go."))
+                       for co in ("Ramp", "Figma", "Notion", "Linear")], db.now())
+    store.invalidate_cache()
+    for _ in range(120):  # an instant run from the checks above may still be finishing
+        if not autopilot.state(pid).get("running"):
+            break
+        time.sleep(0.25)
+    r = autopilot.run(pid, "manual", count=3)
+    checks["'Prepare N now' prepares that many this once, whatever the plan says"] = r.get("queued") == 3 \
+        and autopilot.settings(pid)["per_day"] == 1
 
 
 if __name__ == "__main__":

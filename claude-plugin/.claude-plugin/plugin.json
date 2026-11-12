@@ -1,7 +1,16 @@
 {
   "name": "coop-coach",
-  "version": "1.0.0",
-  "description": "Your Co-op Coach job hunt inside Claude Code: daily autopilot, applications prepared and filled (you press Submit), follow-ups, interview prep and events.",
-  "author": { "name": "Co-op Coach" },
-  "keywords": ["internships", "co-op", "job search", "applications"]
+  "version": "2.0.0",
+  "description": "Your internship hunt inside Claude Code: a daily briefing, applications prepared and filled (you press Submit), tracks of the job market, the NeetCode 150, follow-ups, interviews, hackathons and events.",
+  "author": {
+    "name": "Co-op Coach"
+  },
+  "keywords": [
+    "internships",
+    "co-op",
+    "job search",
+    "applications",
+    "neetcode",
+    "hackathons"
+  ]
 }

@@ -44,15 +44,20 @@ def main():
     ics = cl.get(link["calendar_feed"]).text
     checks["the feed has the saved event"] = "SUMMARY:Hack Night\\, Waterloo" in ics
     checks["...and the interview from the tracker"] = "Interview: Shopify · Software Intern" in ics
-    checks["without Supabase there's no cloud link"] = link["calendar_public"] == ""
+    if supa.enabled():  # the suites on Postgres run inside a Supabase project, so the cloud link is there
+        checks["with Supabase on, the link is also the cloud function's"] = link["calendar_public"] == \
+            f"https://{supa.settings()['ref']}.supabase.co/functions/v1/calendar/{token}.ics"
+    else:
+        checks["without Supabase there's no cloud link"] = link["calendar_public"] == ""
     new = cl.post("/api/events/calendar-feed", json={"profile_id": pid, "new": True}).json()
     checks["a new link revokes the old one"] = cl.get(link["calendar_feed"]).status_code == 404 and \
         cl.get(new["calendar_feed"]).status_code == 200
-    supa.save_settings({"backend": "postgres", "ref": "abcdefghijklmnop"})
-    supa_enabled = supa.enabled
-    supa.enabled = lambda: True
-    urls = routes_events._calendar_urls({"prefs": {"calendar_token": "tok-123"}})
-    supa.enabled = supa_enabled
+    real = (supa.settings, supa.enabled)
+    supa.settings, supa.enabled = (lambda: {"backend": "postgres", "ref": "abcdefghijklmnop"}), (lambda: True)
+    try:
+        urls = routes_events._calendar_urls({"prefs": {"calendar_token": "tok-123"}})
+    finally:
+        supa.settings, supa.enabled = real
     checks["with Supabase the link is the cloud function's"] = urls["calendar_public"] == \
         "https://abcdefghijklmnop.supabase.co/functions/v1/calendar/tok-123.ics"
     for name, ok in checks.items():

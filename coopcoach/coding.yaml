@@ -1,0 +1,209 @@
+# The NeetCode 150 (neetcode.io/practice): the coding problems the Path tracks, and only these. 150 problems in 18
+# topics, in the order of NeetCode's roadmap, which covers most of what coding interviews ask. Each links to its
+# LeetCode page (solve it there); Co-op Coach keeps only the name, link, difficulty and topic, never the problem text.
+# A fourth field `premium` marks the seven that are LeetCode Premium; NeetCode has a free version of each.
+topics:
+  - id: arrays-hashing
+    name: Arrays & Hashing
+    problems:
+      - [Contains Duplicate, contains-duplicate, Easy]
+      - [Valid Anagram, valid-anagram, Easy]
+      - [Two Sum, two-sum, Easy]
+      - [Group Anagrams, group-anagrams, Medium]
+      - [Top K Frequent Elements, top-k-frequent-elements, Medium]
+      - [Product of Array Except Self, product-of-array-except-self, Medium]
+      - [Valid Sudoku, valid-sudoku, Medium]
+      - [Encode and Decode Strings, encode-and-decode-strings, Medium, premium]
+      - [Longest Consecutive Sequence, longest-consecutive-sequence, Medium]
+  - id: two-pointers
+    name: Two Pointers
+    problems:
+      - [Valid Palindrome, valid-palindrome, Easy]
+      - [Two Sum II - Input Array Is Sorted, two-sum-ii-input-array-is-sorted, Medium]
+      - [3Sum, 3sum, Medium]
+      - [Container With Most Water, container-with-most-water, Medium]
+      - [Trapping Rain Water, trapping-rain-water, Hard]
+  - id: sliding-window
+    name: Sliding Window
+    problems:
+      - [Best Time to Buy and Sell Stock, best-time-to-buy-and-sell-stock, Easy]
+      - [Longest Substring Without Repeating Characters, longest-substring-without-repeating-characters, Medium]
+      - [Longest Repeating Character Replacement, longest-repeating-character-replacement, Medium]
+      - [Permutation in String, permutation-in-string, Medium]
+      - [Minimum Window Substring, minimum-window-substring, Hard]
+      - [Sliding Window Maximum, sliding-window-maximum, Hard]
+  - id: stack
+    name: Stack
+    problems:
+      - [Valid Parentheses, valid-parentheses, Easy]
+      - [Min Stack, min-stack, Medium]
+      - [Evaluate Reverse Polish Notation, evaluate-reverse-polish-notation, Medium]
+      - [Generate Parentheses, generate-parentheses, Medium]
+      - [Daily Temperatures, daily-temperatures, Medium]
+      - [Car Fleet, car-fleet, Medium]
+      - [Largest Rectangle in Histogram, largest-rectangle-in-histogram, Hard]
+  - id: binary-search
+    name: Binary Search
+    problems:
+      - [Binary Search, binary-search, Easy]
+      - [Search a 2D Matrix, search-a-2d-matrix, Medium]
+      - [Koko Eating Bananas, koko-eating-bananas, Medium]
+      - [Find Minimum in Rotated Sorted Array, find-minimum-in-rotated-sorted-array, Medium]
+      - [Search in Rotated Sorted Array, search-in-rotated-sorted-array, Medium]
+      - [Time Based Key-Value Store, time-based-key-value-store, Medium]
+      - [Median of Two Sorted Arrays, median-of-two-sorted-arrays, Hard]
+  - id: linked-list
+    name: Linked List
+    problems:
+      - [Reverse Linked List, reverse-linked-list, Easy]
+      - [Merge Two Sorted Lists, merge-two-sorted-lists, Easy]
+      - [Reorder List, reorder-list, Medium]
+      - [Remove Nth Node From End of List, remove-nth-node-from-end-of-list, Medium]
+      - [Copy List With Random Pointer, copy-list-with-random-pointer, Medium]
+      - [Add Two Numbers, add-two-numbers, Medium]
+      - [Linked List Cycle, linked-list-cycle, Easy]
+      - [Find the Duplicate Number, find-the-duplicate-number, Medium]
+      - [LRU Cache, lru-cache, Medium]
+      - [Merge K Sorted Lists, merge-k-sorted-lists, Hard]
+      - [Reverse Nodes in K-Group, reverse-nodes-in-k-group, Hard]
+  - id: trees
+    name: Trees
+    problems:
+      - [Invert Binary Tree, invert-binary-tree, Easy]
+      - [Maximum Depth of Binary Tree, maximum-depth-of-binary-tree, Easy]
+      - [Diameter of Binary Tree, diameter-of-binary-tree, Easy]
+      - [Balanced Binary Tree, balanced-binary-tree, Easy]
+      - [Same Tree, same-tree, Easy]
+      - [Subtree of Another Tree, subtree-of-another-tree, Easy]
+      - [Lowest Common Ancestor of a Binary Search Tree, lowest-common-ancestor-of-a-binary-search-tree, Medium]
+      - [Binary Tree Level Order Traversal, binary-tree-level-order-traversal, Medium]
+      - [Binary Tree Right Side View, binary-tree-right-side-view, Medium]
+      - [Count Good Nodes in Binary Tree, count-good-nodes-in-binary-tree, Medium]
+      - [Validate Binary Search Tree, validate-binary-search-tree, Medium]
+      - [Kth Smallest Element in a BST, kth-smallest-element-in-a-bst, Medium]
+      - [Construct Binary Tree from Preorder and Inorder Traversal, construct-binary-tree-from-preorder-and-inorder-traversal, Medium]
+      - [Binary Tree Maximum Path Sum, binary-tree-maximum-path-sum, Hard]
+      - [Serialize and Deserialize Binary Tree, serialize-and-deserialize-binary-tree, Hard]
+  - id: tries
+    name: Tries
+    problems:
+      - [Implement Trie (Prefix Tree), implement-trie-prefix-tree, Medium]
+      - [Design Add and Search Words Data Structure, design-add-and-search-words-data-structure, Medium]
+      - [Word Search II, word-search-ii, Hard]
+  - id: heap
+    name: Heap / Priority Queue
+    problems:
+      - [Kth Largest Element in a Stream, kth-largest-element-in-a-stream, Easy]
+      - [Last Stone Weight, last-stone-weight, Easy]
+      - [K Closest Points to Origin, k-closest-points-to-origin, Medium]
+      - [Kth Largest Element in an Array, kth-largest-element-in-an-array, Medium]
+      - [Task Scheduler, task-scheduler, Medium]
+      - [Design Twitter, design-twitter, Medium]
+      - [Find Median from Data Stream, find-median-from-data-stream, Hard]
+  - id: backtracking
+    name: Backtracking
+    problems:
+      - [Subsets, subsets, Medium]
+      - [Combination Sum, combination-sum, Medium]
+      - [Permutations, permutations, Medium]
+      - [Subsets II, subsets-ii, Medium]
+      - [Combination Sum II, combination-sum-ii, Medium]
+      - [Word Search, word-search, Medium]
+      - [Palindrome Partitioning, palindrome-partitioning, Medium]
+      - [Letter Combinations of a Phone Number, letter-combinations-of-a-phone-number, Medium]
+      - [N-Queens, n-queens, Hard]
+  - id: graphs
+    name: Graphs
+    problems:
+      - [Number of Islands, number-of-islands, Medium]
+      - [Clone Graph, clone-graph, Medium]
+      - [Max Area of Island, max-area-of-island, Medium]
+      - [Pacific Atlantic Water Flow, pacific-atlantic-water-flow, Medium]
+      - [Surrounded Regions, surrounded-regions, Medium]
+      - [Rotting Oranges, rotting-oranges, Medium]
+      - [Walls and Gates, walls-and-gates, Medium, premium]
+      - [Course Schedule, course-schedule, Medium]
+      - [Course Schedule II, course-schedule-ii, Medium]
+      - [Redundant Connection, redundant-connection, Medium]
+      - [Number of Connected Components in an Undirected Graph, number-of-connected-components-in-an-undirected-graph, Medium, premium]
+      - [Graph Valid Tree, graph-valid-tree, Medium, premium]
+      - [Word Ladder, word-ladder, Hard]
+  - id: advanced-graphs
+    name: Advanced Graphs
+    problems:
+      - [Reconstruct Itinerary, reconstruct-itinerary, Hard]
+      - [Min Cost to Connect All Points, min-cost-to-connect-all-points, Medium]
+      - [Network Delay Time, network-delay-time, Medium]
+      - [Swim in Rising Water, swim-in-rising-water, Hard]
+      - [Alien Dictionary, alien-dictionary, Hard, premium]
+      - [Cheapest Flights Within K Stops, cheapest-flights-within-k-stops, Medium]
+  - id: dp-1d
+    name: 1-D Dynamic Programming
+    problems:
+      - [Climbing Stairs, climbing-stairs, Easy]
+      - [Min Cost Climbing Stairs, min-cost-climbing-stairs, Easy]
+      - [House Robber, house-robber, Medium]
+      - [House Robber II, house-robber-ii, Medium]
+      - [Longest Palindromic Substring, longest-palindromic-substring, Medium]
+      - [Palindromic Substrings, palindromic-substrings, Medium]
+      - [Decode Ways, decode-ways, Medium]
+      - [Coin Change, coin-change, Medium]
+      - [Maximum Product Subarray, maximum-product-subarray, Medium]
+      - [Word Break, word-break, Medium]
+      - [Longest Increasing Subsequence, longest-increasing-subsequence, Medium]
+      - [Partition Equal Subset Sum, partition-equal-subset-sum, Medium]
+  - id: dp-2d
+    name: 2-D Dynamic Programming
+    problems:
+      - [Unique Paths, unique-paths, Medium]
+      - [Longest Common Subsequence, longest-common-subsequence, Medium]
+      - [Best Time to Buy and Sell Stock with Cooldown, best-time-to-buy-and-sell-stock-with-cooldown, Medium]
+      - [Coin Change II, coin-change-ii, Medium]
+      - [Target Sum, target-sum, Medium]
+      - [Interleaving String, interleaving-string, Medium]
+      - [Longest Increasing Path in a Matrix, longest-increasing-path-in-a-matrix, Hard]
+      - [Distinct Subsequences, distinct-subsequences, Hard]
+      - [Edit Distance, edit-distance, Medium]
+      - [Burst Balloons, burst-balloons, Hard]
+      - [Regular Expression Matching, regular-expression-matching, Hard]
+  - id: greedy
+    name: Greedy
+    problems:
+      - [Maximum Subarray, maximum-subarray, Medium]
+      - [Jump Game, jump-game, Medium]
+      - [Jump Game II, jump-game-ii, Medium]
+      - [Gas Station, gas-station, Medium]
+      - [Hand of Straights, hand-of-straights, Medium]
+      - [Merge Triplets to Form Target Triplet, merge-triplets-to-form-target-triplet, Medium]
+      - [Partition Labels, partition-labels, Medium]
+      - [Valid Parenthesis String, valid-parenthesis-string, Medium]
+  - id: intervals
+    name: Intervals
+    problems:
+      - [Insert Interval, insert-interval, Medium]
+      - [Merge Intervals, merge-intervals, Medium]
+      - [Non-overlapping Intervals, non-overlapping-intervals, Medium]
+      - [Meeting Rooms, meeting-rooms, Easy, premium]
+      - [Meeting Rooms II, meeting-rooms-ii, Medium, premium]
+      - [Minimum Interval to Include Each Query, minimum-interval-to-include-each-query, Hard]
+  - id: math-geometry
+    name: Math & Geometry
+    problems:
+      - [Rotate Image, rotate-image, Medium]
+      - [Spiral Matrix, spiral-matrix, Medium]
+      - [Set Matrix Zeroes, set-matrix-zeroes, Medium]
+      - [Happy Number, happy-number, Easy]
+      - [Plus One, plus-one, Easy]
+      - ["Pow(x, n)", powx-n, Medium]
+      - [Multiply Strings, multiply-strings, Medium]
+      - [Detect Squares, detect-squares, Medium]
+  - id: bit-manipulation
+    name: Bit Manipulation
+    problems:
+      - [Single Number, single-number, Easy]
+      - [Number of 1 Bits, number-of-1-bits, Easy]
+      - [Counting Bits, counting-bits, Easy]
+      - [Reverse Bits, reverse-bits, Easy]
+      - [Missing Number, missing-number, Easy]
+      - [Sum of Two Integers, sum-of-two-integers, Medium]
+      - [Reverse Integer, reverse-integer, Medium]

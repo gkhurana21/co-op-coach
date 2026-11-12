@@ -3,6 +3,8 @@
 sync:
   interval_hours: 3          # how often to pull new postings while the server runs
   run_on_startup: true       # sync right away if the last sync is older than interval_hours
+  quick_minutes: 20          # between syncs, check the boards that matter most to you (followed niches, starred and
+                             # applied-to companies, boards that just posted) this often; 0 turns it off
 
 sources:
   simplify:
@@ -48,8 +50,7 @@ ai:
   model: claude-opus-5-5
   max_jobs_scored_per_sync: 60        # per profile with Claude; only the most promising new postings are sent
   # "Use my Claude Code for all AI" (Autopilot tab) runs the `claude` command on your Claude plan instead.
-  claude_code_model: ""               # "" = your Claude Code default; or opus / sonnet / a full model name
-  claude_code_fast_model: sonnet      # bulk work: match scoring, inbox sorting
+  # Which model does which job on your Claude Code: coopcoach/ai_models.yaml. To override one here, models: {chat: sonnet}
   claude_code_max_jobs_scored_per_sync: 60
   claude_code_pause_minutes: 30       # after a usage-limit message, use Groq for this long
   terminal_ticket_hours: 4            # how long "Apply with my Claude Code" in Terminal can use your profile
@@ -58,8 +59,9 @@ email:
   # Connected inboxes (Applications tab) are checked on every sync for application confirmations,
   # online assessments, interview invites, offers and rejections.
   lookback_days: 120         # how far back the first scan goes
-  use_ai: false              # true = let the AI provider classify recruiting emails (sends subject + first part of
-                             # the body); false = built-in rules, nothing leaves your machine
+  use_ai: auto               # auto = when an AI engine is connected it sorts recruiting emails (subject + the first
+                             # part of the body, your own contact details redacted; newsletters and alerts are dropped
+                             # by the rules first); true = always try; false = built-in rules only, nothing leaves
   # Outlook / Hotmail / school Microsoft 365 sign-in: the Application (client) ID of your one-time Microsoft app
   # registration (steps in the app under Applications → Connect an inbox → Outlook). Not a secret, so it's fine to
   # keep here and share with your friend through the private repo.

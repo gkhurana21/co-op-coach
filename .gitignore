@@ -6,3 +6,12 @@ data-demo/
 __pycache__/
 *.pyc
 .DS_Store
+.coverage
+.coverage.*
+htmlcov/
+
+# film: renders, recordings and caches stay local (too big for git; the film lives on YouTube)
+docs/*.mp4
+docs/.cut/
+docs/.film/
+docs/handoff/film-shots/

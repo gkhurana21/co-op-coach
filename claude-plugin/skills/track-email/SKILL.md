@@ -1,6 +1,7 @@
 ---
 name: track-email
 description: Track a recruiting email the student pastes or forwards (application received, online assessment, interview invite, rejection, offer) in Co-op Coach - find or add the application, move its status, keep booking / assessment links and put any stated time on their calendar. Use when they paste an email or say "I got this email from <company>".
+model: haiku
 ---
 
 # Track a recruiting email with Co-op Coach

@@ -28,7 +28,6 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import httpx
-import yaml
 
 from . import config, db
 from .sources import client
@@ -504,7 +503,7 @@ def resolve_feed(url: str) -> str:
     if not m:
         return url
     origin = m.group(1)
-    with client(timeout=20) as c:
+    with client(timeout=20, public_only=True) as c:
         probes = [(f"{origin}/api/2/events", lambda r: '"events"' in r.text[:300]),
                   (f"{origin}/live/json/events/max/400", lambda r: r.text.lstrip().startswith("[")),
                   (f"{origin}/wp-json/tribe/events/v1/events", lambda r: '"events"' in r.text[:500])]
@@ -550,7 +549,7 @@ def _site_label(url: str, base: str) -> str:
 def fetch_feed(url: str) -> tuple[list[dict], str]:
     """Return (events, label-hint)."""
     url = url.strip().replace("webcal://", "https://")
-    with client() as c:
+    with client(public_only=True) as c:  # feeds can be any link someone pasted
         for rx, fetch, base in _SITE_FEEDS:
             if rx.match(url):
                 return fetch(c, url), _site_label(url, base) if base else ""
@@ -578,13 +577,13 @@ def fetch_feed(url: str) -> tuple[list[dict], str]:
 @lru_cache(maxsize=1)
 def campus_sources() -> list[dict]:
     """Universities and Toronto/Waterloo organizers, each checked live by tools/discover_event_sources.py."""
-    data = yaml.safe_load((config.PKG / "event_sources.yaml").read_text()) or {}
+    data = config.read_yaml((config.PKG / "event_sources.yaml").read_text(encoding="utf-8")) or {}
     return data.get("sources") or []
 
 
 @lru_cache(maxsize=1)
 def major_hackathons() -> list[dict]:
-    data = yaml.safe_load((config.PKG / "major_hackathons.yaml").read_text()) or {}
+    data = config.read_yaml((config.PKG / "major_hackathons.yaml").read_text(encoding="utf-8")) or {}
     out = []
     for h in data.get("hackathons") or []:
         names = [h["name"], *(h.get("aka") or [])]
@@ -614,12 +613,19 @@ def _keep(e: dict, feed: dict, typed: bool) -> bool:
     return not feed["career_only"] or e.get("kind") == "hackathon" or bool(CAREER_RE.search(text))
 
 
-def sync_feeds(force: bool = False) -> tuple[int, dict]:
-    """Fetch every feed (several at once); return (new_event_count, per-feed status). University calendars are read at
-    most twice a day unless `force`."""
+RECENT = 15 * 60  # a source read this recently isn't read again when Refresh is pressed
+
+
+def sync_feeds(force: bool = False, min_age: int = 0, progress=None) -> tuple[int, dict]:
+    """Fetch every feed (several at once) and save each as it arrives; return (new_event_count, per-feed status).
+    University calendars are read at most twice a day unless `force`; anything read in the last `min_age` seconds is left.
+    The ones near you and the hackathon lists go first, the big university calendars (the slow ones) last.
+    progress(done, total, new) is called after each source."""
     now = db.now()
     feeds = [f for f in db.rows("SELECT * FROM event_feeds WHERE enabled=1")
-             if force or (f.get("grp") or "") not in CAMPUS_GROUPS or (f.get("last_fetched") or 0) < now - CAMPUS_EVERY]
+             if (force or (f.get("grp") or "") not in CAMPUS_GROUPS or (f.get("last_fetched") or 0) < now - CAMPUS_EVERY)
+             and (not min_age or (f.get("last_fetched") or 0) < now - min_age)]
+    feeds.sort(key=lambda f: (f.get("grp") or "") in CAMPUS_GROUPS)
     status, new = {}, 0
 
     def fetch(f):
@@ -628,56 +634,69 @@ def sync_feeds(force: bool = False) -> tuple[int, dict]:
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as e:
             return f, None, f"error: {e}"[:200]
 
-    with concurrent.futures.ThreadPoolExecutor(8) as pool:
-        results = list(pool.map(fetch, feeds))
-    for feed, got, err in results:
-        if err:
-            with db.tx() as c:
-                c.execute("UPDATE event_feeds SET last_status=? WHERE id=?", (err, feed["id"]))
-            status[feed["url"]] = err
-            continue
-        evs, label = got
-        hint = feed.get("region") or event_region(f"{feed['label'] or ''} {label} {feed['url']}".replace("--", " "))
-        typed = "type[]=" in feed["url"] or "type=" in feed["url"]  # Localist already filtered to career event types
-        rows, seen_titles = {}, {}
-        for e in sorted(evs, key=lambda x: x["start_ts"] or 0):
-            kind = e.get("kind") or classify(e["title"], e["description"])
-            horizon = (270 if kind == "hackathon" else 120) * 86400  # hackathons are announced months ahead
-            if e["start_ts"] < now - 86400 or e["start_ts"] > now + horizon or not e["title"]:
-                continue
-            if not _keep({**e, "kind": kind}, feed, typed):
-                continue
-            tkey = re.sub(r"[^a-z0-9]", "", e["title"].lower())
-            seen_titles[tkey] = seen_titles.get(tkey, 0) + 1
-            if seen_titles[tkey] > 2:  # a daily drop-in: the next two are enough
-                continue
-            region = e.get("region") or event_region(e["location"], e["title"])
-            if region in GENERIC_REGIONS and hint not in ("Unknown", "Elsewhere"):
-                region = hint  # "Gates 104" at Stanford, or a Meetup venue that's just a street corner
-            eid = hashlib.sha1(f"{feed['id']}|{e['uid']}".encode()).hexdigest()[:16]
-            rows[eid] = (eid, feed["id"], e["title"][:300], e["start_ts"], e["end_ts"], int(e["all_day"]), e["location"][:300],
-                         e["url"], e["description"][:1500], kind, now, now, region)
-        with db.tx() as c:
-            known = {r["id"] for r in c.execute("SELECT id FROM events WHERE feed_id=?", (feed["id"],)).fetchall()}
-            if rows:
-                c.executemany(
-                    "INSERT INTO events (id, feed_id, title, start_ts, end_ts, all_day, location, url, description,"
-                    " kind, first_seen, last_seen, region) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
-                    " ON CONFLICT(id) DO UPDATE SET title=excluded.title, start_ts=excluded.start_ts,"
-                    " end_ts=excluded.end_ts, location=excluded.location, url=excluded.url,"
-                    " description=excluded.description, kind=excluded.kind, last_seen=excluded.last_seen,"
-                    " region=excluded.region", list(rows.values()))
-            new += len(set(rows) - known)
-            if label and not feed["label"]:
-                c.execute("UPDATE event_feeds SET label=? WHERE id=?", (label, feed["id"]))
-            c.execute("UPDATE event_feeds SET last_status=?, last_fetched=? WHERE id=?",
-                      (f"ok · {len(rows)} upcoming career events", now, feed["id"]))
-        status[feed["url"]] = f"ok ({len(rows)})"
+    if progress:
+        progress(0, len(feeds), 0)
+    pool = concurrent.futures.ThreadPoolExecutor(8)
+    for done, fut in enumerate(concurrent.futures.as_completed([pool.submit(fetch, f) for f in feeds]), 1):
+        feed, got, err = fut.result()
+        new += _save_feed(feed, got, err, now, status)
+        if progress:
+            progress(done, len(feeds), new)
+    pool.shutdown()
     with db.tx() as c:
         c.execute("DELETE FROM events WHERE start_ts < ?", (now - 7 * 86400,))
-        for e in c.execute("SELECT id, location, title FROM events WHERE region IS NULL").fetchall():
-            c.execute("UPDATE events SET region=? WHERE id=?", (event_region(e["location"], e["title"]), e["id"]))
+        missing = c.execute("SELECT id, location, title FROM events WHERE region IS NULL").fetchall()
+        if missing:
+            c.executemany("UPDATE events SET region=? WHERE id=?", [(event_region(e["location"], e["title"]), e["id"]) for e in missing])
     return new, status
+
+
+def _save_feed(feed: dict, got, err: str | None, now: int, status: dict) -> int:
+    """One source's events, saved as soon as they're read. Returns how many are new."""
+    new = 0
+    if err:
+        with db.tx() as c:
+            c.execute("UPDATE event_feeds SET last_status=? WHERE id=?", (err, feed["id"]))
+        status[feed["url"]] = err
+        return 0
+    evs, label = got
+    hint = feed.get("region") or event_region(f"{feed['label'] or ''} {label} {feed['url']}".replace("--", " "))
+    typed = "type[]=" in feed["url"] or "type=" in feed["url"]  # Localist already filtered to career event types
+    rows, seen_titles = {}, {}
+    for e in sorted(evs, key=lambda x: x["start_ts"] or 0):
+        kind = e.get("kind") or classify(e["title"], e["description"])
+        horizon = (270 if kind == "hackathon" else 120) * 86400  # hackathons are announced months ahead
+        if e["start_ts"] < now - 86400 or e["start_ts"] > now + horizon or not e["title"]:
+            continue
+        if not _keep({**e, "kind": kind}, feed, typed):
+            continue
+        tkey = re.sub(r"[^a-z0-9]", "", e["title"].lower())
+        seen_titles[tkey] = seen_titles.get(tkey, 0) + 1
+        if seen_titles[tkey] > 2:  # a daily drop-in: the next two are enough
+            continue
+        region = e.get("region") or event_region(e["location"], e["title"])
+        if region in GENERIC_REGIONS and hint not in ("Unknown", "Elsewhere"):
+            region = hint  # "Gates 104" at Stanford, or a Meetup venue that's just a street corner
+        eid = hashlib.sha1(f"{feed['id']}|{e['uid']}".encode()).hexdigest()[:16]
+        rows[eid] = (eid, feed["id"], e["title"][:300], e["start_ts"], e["end_ts"], int(e["all_day"]), e["location"][:300],
+                     e["url"], e["description"][:1500], kind, now, now, region)
+    with db.tx() as c:
+        known = {r["id"] for r in c.execute("SELECT id FROM events WHERE feed_id=?", (feed["id"],)).fetchall()}
+        if rows:
+            c.executemany(
+                "INSERT INTO events (id, feed_id, title, start_ts, end_ts, all_day, location, url, description,"
+                " kind, first_seen, last_seen, region) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(id) DO UPDATE SET title=excluded.title, start_ts=excluded.start_ts,"
+                " end_ts=excluded.end_ts, location=excluded.location, url=excluded.url,"
+                " description=excluded.description, kind=excluded.kind, last_seen=excluded.last_seen,"
+                " region=excluded.region", list(rows.values()))
+        new += len(set(rows) - known)
+        if label and not feed["label"]:
+            c.execute("UPDATE event_feeds SET label=? WHERE id=?", (label, feed["id"]))
+        c.execute("UPDATE event_feeds SET last_status=?, last_fetched=? WHERE id=?",
+                  (f"ok · {len(rows)} upcoming career events", now, feed["id"]))
+    status[feed["url"]] = f"ok ({len(rows)})"
+    return new
 
 
 def _dedupe_key(e: dict) -> tuple:
@@ -719,7 +738,13 @@ def for_person(pid: int, days: int = 90) -> list[dict]:
 def ics_for(evs: list[dict], name: str = "Co-op Coach events") -> str:
     """An iCalendar file (one event or a whole subscribable list)."""
     def esc(s: str) -> str:
-        return (s or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+        s = (s or "").replace("\r\n", "\n").replace("\r", "\n")
+        return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    def link(u: str) -> str:
+        # only http(s) links, and no line breaks or other control characters that would add lines to the file
+        u = re.sub(r"[\x00-\x1f\x7f]", "", u or "")
+        return u if re.match(r"https?://", u, re.I) else ""
 
     def stamp(ts: int, all_day: bool) -> str:
         d = datetime.fromtimestamp(ts, timezone.utc)
@@ -732,39 +757,49 @@ def ics_for(evs: list[dict], name: str = "Co-op Coach events") -> str:
                   f"DTSTART{stamp(e['start_ts'], e.get('all_day'))}", f"DTEND{stamp(end, e.get('all_day'))}",
                   f"SUMMARY:{esc(e['title'])}", f"LOCATION:{esc(e.get('location') or '')}",
                   f"DESCRIPTION:{esc(((e.get('url') or '') + chr(10) + (e.get('description') or ''))[:900])}",
-                  f"URL:{e.get('url') or ''}", "END:VEVENT"]
+                  f"URL:{link(e.get('url'))}"]
+        alarm = e.get("alarm")
+        if isinstance(alarm, int) and alarm >= 0:  # a reminder this many minutes before
+            lines += ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{esc(e['title'])}",
+                      f"TRIGGER:-PT{alarm}M", "END:VALARM"]
+        lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
     return "\r\n".join(lines) + "\r\n"
 
 
 def application_dates(pid: int) -> list[dict]:
-    """Interview times and online-assessment deadlines from the tracker, shaped like events for ics_for()."""
-    out = []
+    """What's on the calendar besides saved events: meetings and deadlines found in email (each with a reminder),
+    interview times and assessment deadlines set on the tracker, and reminders, shaped like events for ics_for()."""
+    from . import meetings
+    out = meetings.for_calendar(pid)
+    covered = {(i["job_id"], "oa" if i["kind"] == "oa" else "interview") for i in out if i.get("job_id")}
     for a in db.rows("SELECT a.job_id, a.interview_at, a.oa_due_at, COALESCE(j.company, a.company) AS company,"
                      " COALESCE(j.title, a.title) AS title, COALESCE(j.url, a.url) AS url FROM applications a"
                      " LEFT JOIN jobs j ON j.id=a.job_id WHERE a.profile_id=? AND (a.interview_at IS NOT NULL OR"
                      " a.oa_due_at IS NOT NULL)", (pid,)):
-        if a["interview_at"]:
+        if a["interview_at"] and (a["job_id"], "interview") not in covered:
             out.append({"id": f"interview-{a['job_id']}", "title": f"Interview: {a['company']} · {a['title']}",
-                        "start_ts": a["interview_at"], "end_ts": a["interview_at"] + 3600, "url": a["url"]})
-        if a["oa_due_at"]:
+                        "start_ts": a["interview_at"], "end_ts": a["interview_at"] + 3600, "url": a["url"], "alarm": 60,
+                        "kind": "interview", "job_id": a["job_id"]})
+        if a["oa_due_at"] and (a["job_id"], "oa") not in covered:
             out.append({"id": f"oa-{a['job_id']}", "title": f"Online assessment due: {a['company']} · {a['title']}",
-                        "start_ts": a["oa_due_at"], "end_ts": a["oa_due_at"] + 1800, "url": a["url"]})
+                        "start_ts": a["oa_due_at"], "end_ts": a["oa_due_at"] + 1800, "url": a["url"], "alarm": 1440,
+                        "kind": "oa", "job_id": a["job_id"]})
     for r in db.rows("SELECT id, title, due_at FROM reminders WHERE profile_id=? AND done=0 AND due_at > ?",
-                     (pid, db.now() - 30 * 86400)):  # reminders set in the chat
+                     (pid, db.this_hour() - 30 * 86400)):  # reminders set in the chat
         out.append({"id": f"reminder-{r['id']}", "title": f"⏰ {r['title']}", "start_ts": r["due_at"],
-                    "end_ts": r["due_at"] + 900, "url": ""})
+                    "end_ts": r["due_at"] + 900, "url": "", "alarm": 0, "kind": "reminder"})
     return out
 
 
 def count_upcoming(days: int = 60) -> int:
-    now = db.now()
+    now = db.this_hour()
     return db.row("SELECT COUNT(*) AS n FROM events WHERE COALESCE(end_ts, start_ts) >= ? AND start_ts <= ?",
                   (now - 3600, now + days * 86400))["n"]
 
 
 def upcoming(days: int = 60, kind: str = "") -> list[dict]:
-    now = db.now()
+    now = db.this_hour()
     return db.rows(
         "SELECT e.id, e.feed_id, e.title, e.start_ts, e.end_ts, e.all_day, e.location, e.url,"
         " SUBSTR(e.description, 1, 600) AS description, e.kind, e.first_seen, e.region, f.label AS feed_label,"

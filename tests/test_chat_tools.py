@@ -68,13 +68,13 @@ def main():
     agent.call(pid, f["_undo"]["tool"], f["_undo"]["args"])
     checks["...Undo puts the old resume back"] = routes_docs.master(pid)["experience"][0]["title"] == "Software Engineer Inter"
 
-    ch = agent.call(pid, "change_autopilot", {"per_day": 5, "block_company": "Oracle", "paused_until": "2030-01-05"})
+    ch = agent.call(pid, "change_autopilot", {"per_day": 7, "block_company": "Oracle", "paused_until": "2030-01-05"})
     cfg = autopilot.settings(pid)
-    checks["change_autopilot changes settings"] = cfg["per_day"] == 5 and "Oracle" in cfg["blocklist"] and \
+    checks["change_autopilot changes settings"] = cfg["per_day"] == 7 and "Oracle" in cfg["blocklist"] and \
         cfg["paused_until"] == "2030-01-05"
     agent.call(pid, "change_autopilot", ch["_undo"]["args"])
     cfg = autopilot.settings(pid)
-    checks["...and Undo restores them"] = cfg["per_day"] != 5 and "Oracle" not in cfg["blocklist"] and not cfg["paused_until"]
+    checks["...and Undo restores them"] = cfg["per_day"] != 7 and "Oracle" not in cfg["blocklist"] and not cfg["paused_until"]
 
     nf = agent.call(pid, "not_for_me", {"job_id": shop["id"], "reason": "company"})
     checks["not_for_me hides it and learns (a company reason blocks the company)"] = nf.get("ok") and \
@@ -97,6 +97,9 @@ def main():
     o = agent.call(pid, "open_link", {"job_id": shop["id"]})
     checks["open_link opens the posting"] = o.get("ok") and RAN and RAN[-1][-1].startswith("https://")
     checks["...but never a non-web link"] = "error" in agent.call(pid, "open_link", {"url": "file:///etc/passwd"})
+    checks["...and never a link that isn't already in Co-op Coach (e.g. one planted in a web page)"] = "error" in \
+        agent.call(pid, "open_link", {"url": "https://evil.example/login"})
+    checks["...while a known posting link opens"] = agent.call(pid, "open_link", {"url": shop["url"]}).get("ok")
     checks["research needs an AI engine and says so"] = "AI engine" in agent.call(pid, "research_company", {"company": "Ramp"}).get("error", "")
     checks["check_inbox says how to connect when there's no inbox"] = "Inbox" in agent.call(pid, "check_inbox", {}).get("error", "")
 

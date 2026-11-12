@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import auth, config
+from . import auth, claude_code, config
 from .claude_code import Unavailable, _write_private, mcp_config
 from .privacy import Redactor
 
@@ -36,7 +36,7 @@ APP_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
 _LIMIT_RE = re.compile(r"usage limit|rate limit|limit reached|try again at|quota", re.I)
 _status: dict = {"t": 0.0, "v": None}
 _paused_until = 0.0
-_refreshing = threading.Lock()
+_checking = threading.Lock()
 
 
 def binary() -> str | None:
@@ -81,9 +81,7 @@ def _check_limit(msg: str) -> None:
     _status["t"] = 0
 
 
-def status(refresh: bool = False) -> dict:
-    if not refresh and _status["v"] and time.time() - _status["t"] < 120:
-        return _status["v"]
+def _check() -> dict:
     b = binary()
     v = {"installed": bool(b), "logged_in": False, "version": "", "method": "", "path": b or ""}
     if b:
@@ -100,23 +98,25 @@ def status(refresh: bool = False) -> dict:
     v["paused_until"] = _paused_until if paused() else 0
     v["paused_minutes"] = int(paused() / 60) + 1 if paused() else 0
     v["model"] = model()
-    _status.update(t=time.time(), v=v)
     return v
 
 
+def status(refresh: bool = False) -> dict:
+    """Same caching as Claude Code's: signed in is reused for two minutes, not signed in for a few seconds."""
+    if not refresh and claude_code.fresh(_status):
+        return _status["v"]
+    return claude_code.checked(_status, _checking, _check)
+
+
 def status_cached() -> dict:
-    v = _status["v"]
-    if (not v or time.time() - _status["t"] > 120) and not _refreshing.locked():
-        def refresh():
-            with _refreshing:
-                status(refresh=True)
-        threading.Thread(target=refresh, daemon=True).start()
-    return v or {"installed": bool(binary()), "logged_in": False, "version": "", "checking": True}
+    """Never blocks (for /api/state): the last known status, refreshed in the background when it's old."""
+    claude_code.in_background(_status, _checking, status)
+    return _status["v"] or {"installed": bool(binary()), "logged_in": False, "version": "", "checking": True}
 
 
-def usable() -> bool:
-    s = status()
-    return s["installed"] and s["logged_in"] and not paused()
+def usable(wait: bool = True) -> bool:
+    s = status() if wait else status_cached()
+    return bool(s.get("installed") and s.get("logged_in")) and not paused()
 
 
 def model() -> str:
@@ -182,7 +182,8 @@ def _raise(msg: str) -> None:
 
 
 def call_json(system: str, text: str, schema: dict, effort: str = "medium", fast: bool = False,
-              timeout: int = 300) -> dict:
+              timeout: int = 300, web: bool = False) -> dict:
+    """One structured answer. `web` turns on ChatGPT's live web search for this call (and nothing else)."""
     if not binary():
         raise Unavailable("ChatGPT's Codex isn't installed")
     if paused():
@@ -194,13 +195,16 @@ def call_json(system: str, text: str, schema: dict, effort: str = "medium", fast
     _write_private(sfile, json.dumps(schema))
     prompt = f"<instructions>\n{red.redact(system)}\n</instructions>\n\n{red.redact(text)}\n\nAnswer only in the JSON schema."
     try:
-        p = subprocess.run([*_base(fast, effort), "--output-schema", str(sfile), "-o", str(ofile), "--json", "-"],
+        base = _base(fast, effort)
+        if web:
+            base.insert(1, "--search")  # a global flag: it goes before `exec`
+        p = subprocess.run([*base, "--output-schema", str(sfile), "-o", str(ofile), "--json", "-"],
                            input=prompt, capture_output=True, text=True, timeout=timeout, env=_env(), cwd=wd)
         evs = _events(p.stdout)
         bad = _failure(evs)
         if bad or not ofile.exists():
             _raise(bad or (p.stderr or "no answer").strip()[-240:])
-        out = ofile.read_text().strip()
+        out = ofile.read_text(encoding="utf-8").strip()
         from .claude_code import _parse_json_text
         return red.restore(_parse_json_text(out))
     except subprocess.TimeoutExpired:
@@ -338,5 +342,6 @@ def sign_in_in_terminal() -> None:
     if not b or sys.platform != "darwin":
         raise Unavailable("Open the ChatGPT app and sign in")
     script = f'tell application "Terminal"\nactivate\ndo script {json.dumps(shlex.quote(b) + " login")}\nend tell'
-    subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=20)
+    claude_code._osascript(script)
     _status["t"] = 0
+    claude_code.watch_sign_in("codex", status)

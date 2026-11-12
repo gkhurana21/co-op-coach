@@ -2,8 +2,10 @@
 
     .venv/bin/python -m tools.record_demo            # docs/screenshots/*.png, docs/demo.mp4, docs/demo.gif
 
-Starts `python -m coopcoach demo --fresh` on a spare port, drives it with Playwright the way a person would (paste a
-recruiter email, fix the resume, look around Events), and stops it again. Needs ffmpeg for the video and GIF.
+Starts `python -m coopcoach demo --fresh` on a spare port, drives it with Playwright the way a person would (Jarvis prepares
+applications and takes a plan in plain words, a NeetCode try logged on the Path with Jarvis's milestones, ＋ Tracks and a
+track's companies, market and postings, a pasted recruiter email, a resume fix, Events, a question for Jarvis in the
+chat), and stops it again. Needs ffmpeg for the video and GIF.
 """
 
 import shutil
@@ -20,6 +22,8 @@ DOCS = ROOT / "docs"
 SHOTS = DOCS / "screenshots"
 PORT = 8797
 URL = f"http://127.0.0.1:{PORT}"
+GROUP = {"autopilot": "today", "path": "today", "matches": "jobs", "tracks": "jobs", "tracker": "apps",
+         "documents": "apps", "recruiters": "people", "events": "events"}  # the tabs in app.js NAV
 INVITE = """Hi Alex,
 
 Thanks for applying to the Software Engineering Intern role. We'd love to move you to the next step: a 30-minute
@@ -61,12 +65,57 @@ def main() -> None:
             pause = lambda s=1.6: page.wait_for_timeout(int(s * 1000))  # noqa: E731
             shot = lambda name: page.screenshot(path=str(SHOTS / f"{name}.png"))  # noqa: E731
 
+            def celebrate() -> None:
+                """Let Jarvis's milestone card (and any after it) play, then move on."""
+                try:
+                    page.wait_for_selector("#ms-ok", timeout=4000)
+                except Exception:
+                    return
+                while page.is_visible("#ms-ok"):
+                    pause(2.6)
+                    page.click("#ms-ok")
+                    pause(0.6)
+
+            def go(view: str) -> None:
+                """Click the group tab, then the section under it, the way a person moves around."""
+                page.click(f'#tabs [data-group="{GROUP[view]}"]')
+                if page.is_visible(f'#subnav [data-view="{view}"]'):
+                    page.click(f'#subnav [data-view="{view}"]')
+
             page.goto(URL)
-            page.wait_for_selector(".ap-hero")
+            page.wait_for_selector(".today-hero")
             pause(2.5)
             shot("autopilot")
+            page.click("#ap-run")  # Jarvis prepares five applications, with progress as it goes
+            page.wait_for_selector("#ap-run:not([disabled])", timeout=90000)
+            pause(2.5)
+            celebrate()
+            page.fill("#ap-tell-text", "10 a day, only startups in Toronto, skip Amazon")
+            pause(1)
+            page.click("#ap-tell button")
+            pause(2.5)
+            page.click('[data-preset="6"]')  # back to any company, so the rest of the tour isn't filtered
+            pause(1.2)
 
-            page.click('[data-tab="matches"]')
+            go("path")
+            page.wait_for_selector(".trail-sec")
+            celebrate()
+            pause(2)
+            shot("path")
+            page.click("[data-log]")  # Next up: log a NeetCode try (solved, 14 minutes)
+            page.wait_for_selector("#ld-save")
+            pause(1.2)
+            page.fill("#ld-min", "14")
+            page.fill("#ld-notes", "two pointers")
+            pause(1)
+            page.click("#ld-save")
+            pause(2)
+            celebrate()
+            if page.is_visible("#ld-close"):
+                page.click("#ld-close")
+            pause(1)
+
+            go("matches")
             page.wait_for_selector(".job")
             pause(2)
             shot("matches")
@@ -74,7 +123,30 @@ def main() -> None:
             pause(1.2)
             page.mouse.wheel(0, -700)
 
-            page.click('[data-tab="tracker"]')
+            def track(tid: str, sec: str) -> None:
+                page.evaluate("([t, s]) => openTrack(t, s)", [tid, sec])
+                page.wait_for_selector("#t-head .t-counts")
+
+            go("tracks")
+            page.wait_for_selector(".track-card")
+            pause(2)
+            shot("tracks")
+            track("co:startups", "companies")
+            page.wait_for_selector(".co-row")
+            pause(2)
+            shot("startups")
+            track("co:quant-firms", "companies")
+            page.wait_for_selector(".co-row")
+            pause(1.5)
+            shot("track-companies")
+            page.click('#t-head [data-sec="market"]')
+            page.wait_for_selector(".tiles")
+            pause(2)
+            page.locator('#t-body [data-facet^="term:"]').first.click()  # every number opens the postings behind it
+            page.wait_for_selector("#tp-facet")
+            pause(2)
+
+            go("tracker")
             page.wait_for_selector(".app-row")
             pause(1.5)
             page.click("#paste-email")
@@ -85,7 +157,12 @@ def main() -> None:
             pause(2.5)
             shot("applications")
 
-            page.click('[data-tab="documents"]')
+            go("recruiters")
+            page.wait_for_selector(".rc-person")
+            pause(2)
+            shot("people")
+
+            go("documents")
             page.wait_for_selector("#issues")
             pause(2)
             shot("resume-studio")
@@ -93,34 +170,41 @@ def main() -> None:
                 page.click("#fix-all")
                 pause(2.5)
 
-            page.click('[data-tab="events"]')
+            go("events")
             page.wait_for_selector("#ev-list")
             pause(2)
             shot("events")
-            page.click('[data-view="month"]')
+            page.click('#main [data-view="month"]')
             pause(2)
             shot("events-month")
-            page.click('[data-view="hack"]')
+            page.click('#main [data-view="hack"]')
             page.wait_for_selector(".hack-row")
             pause(2.5)
             shot("hackathons")
 
-            page.click('[data-tab="settings"]')
+            page.click("#settings-btn")
             page.click('[data-sec="account"]')
             page.wait_for_selector(".stat-grid")
             pause(2)
             shot("numbers")
 
             page.click("#chat-fab")
-            pause(2)
+            pause(1.5)
+            page.fill("#chat-input", "How's my streak?")
+            pause(0.8)
+            bots = page.locator("#chat-log .msg.bot").count()
+            page.press("#chat-input", "Enter")
+            page.wait_for_function(f"document.querySelectorAll('#chat-log .msg.bot').length > {bots}", timeout=30000)
+            pause(2.5)
             shot("chat")
             ctx.close()
             browser.close()
         webm = next(video_dir.glob("*.webm"))
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(webm), "-vf", "scale=1280:-2", "-c:v", "libx264",
-                        "-pix_fmt", "yuv420p", "-crf", "28", "-movflags", "+faststart", str(DOCS / "demo.mp4")], check=True)
+                        "-pix_fmt", "yuv420p", "-crf", "23", "-movflags", "+faststart", str(DOCS / "demo.mp4")], check=True)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(webm), "-vf",
-                        "fps=8,scale=880:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer",
+                        "setpts=PTS/1.6,fps=7,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=80:stats_mode=diff[p];"
+                        "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle",  # 1.6x speed: ~6 MB for the README
                         str(DOCS / "demo.gif")], check=True)
         shutil.rmtree(video_dir, ignore_errors=True)
         for f in sorted(DOCS.glob("demo.*")) + sorted(SHOTS.glob("*.png")):

@@ -2,6 +2,7 @@
 name: resume
 description: Review or tailor the student's resume with Co-op Coach - a recruiter-style review, or the changes that matter for a specific posting, using only real experience. Use for "review my resume", "tailor my resume for <company>".
 argument-hint: "[company or role to tailor for]"
+model: sonnet
 ---
 
 # Resume with Co-op Coach

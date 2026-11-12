@@ -1,0 +1,630 @@
+# Niches: a whole ecosystem of companies for one kind of role, grouped into segments, so nobody misses a firm just
+# because they'd never heard of it. Explore → Niches shows them; following one tracks every firm in it.
+#
+# Per niche:
+#   season   the internship term the `opened` dates are for (tools/refresh_niches.py sets it with the dates).
+# Per firm:
+#   board    the careers board Co-op Coach reads directly (ats:slug, as in seed_companies.yaml). Most are already in
+#            boards_discovered.yaml; following the niche adds any that aren't.
+#   opened   the day that firm's first Summer 2027 internship appeared on SimplifyJobs' public list in 2026: when its
+#            hiring for that summer opened. At a trading firm any internship counts; at a bank, pension fund, energy
+#            company, exchange, asset manager or betting company only quant and trading roles do. Simplify often tags
+#            these internships "N/A" or "Summer 2026", so those count too when they went up from June 2026 on;
+#            listings open all year (more than two terms) don't. The list's history starts mid-February 2026, so
+#            openings before March aren't dated. No date means none was found there: the firm may post only on its
+#            own site, recruit other ways, or tag its roles too loosely to date.
+#            tools/refresh_niches.py re-reads the dates each season and lists firms this file is missing.
+#   canada   a Canadian office, when the firm isn't Canadian itself.
+#   small    a smaller or lesser-known firm: fewer people know to apply.
+# Postings and opening dates were taken from SimplifyJobs/Summer2027-Internships (listings.json, read 2026-10-14).
+# The firm list was cross-checked against the Northwestern Fintech Club's public quant internship list
+# (github.com/northwesternfintech/2027QuantInternships).
+
+quant:
+  name: Quant & Trading
+  season: Summer 2027      # the internship term the opened: dates are for
+  blurb: >-
+    Everyone knows Jane Street and Citadel. Behind them are 100+ firms that hire quant traders, researchers,
+    developers and engineers: smaller prop shops, systematic funds, pod shops, Canadian pension funds and bank
+    desks, energy traders, exchanges and betting companies.
+  category: Quant          # postings in this role category, at firms not on the list, are offered as finds
+  tiers: [quant]
+  keywords: [quant, quantitative, trading, trader, market making, market maker, systematic, hedge fund, derivatives]
+  segments:
+    - id: market-makers
+      name: Market makers & prop trading
+      blurb: Trade their own money and quote prices on exchanges. Hire quant traders, quant researchers and
+        software engineers (C++, Python, OCaml), and some hire FPGA and hardware engineers.
+      firms:
+        - {name: Jane Street, board: greenhouse:janestreet, where: "New York, London, Hong Kong", opened: 2026-07-06, careers: "https://www.janestreet.com/join-jane-street/open-roles/?type=students-and-new-grads", note: Uses OCaml for most of its code}
+        - {name: Citadel Securities, where: "Chicago, New York, Miami", opened: 2026-07-01, careers: "https://www.citadelsecurities.com/careers/students/internships/", note: "Market-making firm; separate from Citadel, the hedge fund"}
+        - {name: Hudson River Trading, aliases: [HRT], where: "New York, Chicago, Austin", opened: 2026-07-13, careers: "https://www.hudsonrivertrading.com/careers/"}
+        - {name: Jump Trading, where: "Chicago, New York", opened: 2026-07-08, careers: "https://www.jumptrading.com/careers/?titleSearch=campus+intern"}
+        - {name: Optiver, board: greenhouse:optiverprivate, where: "Chicago, Austin", opened: 2026-06-16, careers: "https://optiver.com/working-at-optiver/career-opportunities/"}
+        - {name: IMC Trading, aliases: [IMC], board: greenhouse:imc, where: "Chicago, New York", opened: 2026-07-01, careers: "https://careers.imc.com/us/en/student-opportunities"}
+        - {name: Susquehanna International Group (SIG), aliases: [SIG, Susquehanna], where: "Bala Cynwyd, New York, Chicago", opened: 2026-04-09, careers: "https://careers.sig.com/intern-openings", note: "First of the big market makers to open for Summer 2027 (April)"}
+        - {name: DRW, board: greenhouse:drwuniversityjobs, where: "Chicago, New York", canada: Montreal, opened: 2026-07-13, careers: "https://drw.com/work-at-drw/category/campus"}
+        - {name: Tower Research Capital, where: "New York, Chicago", canada: Montreal, opened: 2026-07-05, careers: "https://www.tower-research.com/open-positions"}
+        - {name: Five Rings, aliases: [Five Rings Capital], board: greenhouse:fiveringsllc, where: New York, opened: 2026-07-14, careers: "https://fiverings.com/careers"}
+        - {name: Akuna Capital, aliases: [Akuna Capital University], where: Chicago, opened: 2026-07-13, careers: "https://akunacapital.com/careers#careers"}
+        - {name: Flow Traders, board: greenhouse:flowtraders, where: "New York, Amsterdam", opened: 2026-07-08, careers: "https://www.flowtraders.com/careers", note: Specializes in ETFs}
+        - {name: Virtu Financial, aliases: [Virtu], board: greenhouse:virtu, where: "New York, Austin, Chicago", opened: 2026-06-26, careers: "https://www.virtu.com/careers/"}
+        - {name: XTX Markets, board: greenhouse:xtxmarketstechnologies, where: London, careers: "https://www.xtxmarkets.com/career/internships-finance-risk-core-engineering/"}
+    - id: prop-shops
+      name: Smaller prop shops
+      blurb: Smaller trading firms, many in Chicago. Fewer students know to apply, so the odds are better.
+        Some take only a few interns a year.
+      firms:
+        - {name: Old Mission, aliases: [Old Mission Capital], where: "Chicago, New York", opened: 2026-07-15, careers: "https://www.oldmissioncapital.com/careers/", small: true}
+        - {name: Chicago Trading Company, aliases: [CTC], board: greenhouse:chicagotradingcampus, where: Chicago, opened: 2026-07-20, careers: "https://www.chicagotrading.com/search#search-results", small: true}
+        - {name: Wolverine Trading, where: Chicago, careers: "https://www.wolve.com/open-positions", small: true}
+        - {name: Belvedere Trading, board: lever:belvederetrading, where: Chicago, opened: 2026-08-07, careers: "https://www.belvederetrading.com/jobs/", small: true}
+        - {name: PEAK6, board: "workday:https://peak6group.wd1.myworkdayjobs.com/CapMan", where: Chicago, opened: 2026-08-10, careers: "https://peak6.com/careers/", small: true}
+        - {name: Maven Securities, board: greenhouse:mavensecuritiesholdingltd, where: "Chicago, London", opened: 2026-07-31, careers: "https://www.mavensecurities.com/jobs/", small: true}
+        - {name: DV Trading, board: greenhouse:dvtrading, where: "New York, Chicago", opened: 2026-08-04, small: true}
+        - {name: Gelber Group, board: greenhouse:gelbergroup, where: Chicago, careers: "https://boards.greenhouse.io/gelbergroup", small: true}
+        - {name: Geneva Trading, board: greenhouse:genevatrading, where: Chicago, opened: 2026-09-10, careers: "https://www.genevatrading.com/careers-open-positions/", small: true}
+        - {name: TransMarket Group, where: Chicago, board: greenhouse:transmarketgroup, careers: "https://www.transmarketgroup.com/careers", small: true}
+        - {name: BlackEdge Capital, board: greenhouse:blackedgecapital, where: Chicago, careers: "https://boards.greenhouse.io/blackedgecapital", small: true}
+        - {name: GTS, where: New York, opened: 2026-03-09, careers: "https://careers-gtsx.icims.com/jobs", small: true}
+        - {name: Group One Trading, where: Chicago, small: true}
+        - {name: Valkyrie Trading, where: Chicago, careers: "https://www.valkyrietrading.com/careers/", small: true}
+        - {name: HAP Capital, board: lever:hap-capital, where: New York, careers: "https://jobs.lever.co/hap-capital", small: true, note: Options market maker}
+        - {name: Headlands Technologies, aliases: [Headlands Tech], board: greenhouse:headlandstechnologiesllc, where: Chicago, careers: "https://www.headlandstech.com/careers/", small: true, note: "Small team; C++-heavy"}
+        - {name: Radix Trading, board: greenhouse:radixuniversity, where: Chicago, careers: "https://radixtrading.co/", small: true, note: Small team}
+        - {name: Ansatz Capital, board: lever:ansatzcapital, where: New York, careers: "https://jobs.lever.co/ansatzcapital", small: true, note: Small team}
+        - {name: Aquatic Capital Management, aliases: [Aquatic], board: greenhouse:aquaticcapitalmanagement, where: "Chicago, London", opened: 2026-04-01, careers: "https://boards.greenhouse.io/aquaticcapitalmanagement", small: true}
+        - {name: Vatic Labs, where: New York, careers: "http://www.vaticinvestments.com/careers/", small: true}
+        - {name: Trillium Trading, aliases: [Trillium], where: "New York, Chicago, Miami", opened: 2026-07-24, small: true}
+        - {name: Mako Trading, where: London, careers: "https://www.mako.com/opportunities", small: true}
+    - id: systematic
+      name: Systematic hedge funds
+      blurb: Funds whose trading is driven by models and data. Mostly quant researcher, quant developer and software
+        engineering roles, with heavy statistics, ML and Python/C++. Some research roles are PhD-only.
+      firms:
+        - {name: Two Sigma, where: New York, opened: 2026-08-02, careers: "https://careers.twosigma.com/careers/OpenRoles/"}
+        - {name: D. E. Shaw, aliases: [DE Shaw, The D. E. Shaw Group], where: New York, careers: "https://www.deshaw.com/careers/internships"}
+        - {name: Renaissance Technologies, where: "East Setauket, NY", careers: "https://www.rentec.com/Careers.action?jobs=true"}
+        - {name: AQR Capital Management, aliases: [AQR], where: "Greenwich, CT", opened: 2026-05-15, careers: "https://careers.aqr.com/jobs"}
+        - {name: The Voleon Group, aliases: [Voleon], board: ashby:voleon, where: "Berkeley, New York", careers: "https://voleon.com/jobs/", note: Machine-learning driven}
+        - {name: PDT Partners, board: greenhouse:pdtpartners, where: New York, opened: 2026-07-24, careers: "https://pdtpartners.com/careers"}
+        - {name: TGS Management, where: "Irvine, CA", careers: "https://www.tgsmc.com/join-our-team/", small: true}
+        - {name: Arrowstreet Capital, board: "workday:https://arrowstreetcapital.wd5.myworkdayjobs.com/Campus_Careers", where: Boston, opened: 2026-07-10, careers: "https://arrowstreetcapital.wd5.myworkdayjobs.com/Campus_Careers"}
+        - {name: WorldQuant, board: greenhouse:worldquant, where: New York, careers: "https://www.worldquant.com/career-listing/"}
+        - {name: Quantbot Technologies, aliases: [Quantbot], where: New York, opened: 2026-08-11, careers: "https://www.quantbot.com/careers", small: true}
+        - {name: Voloridge, aliases: [Voloridge Investment Management], board: greenhouse:voloridgeinvestmentmanagement, where: "Jupiter, FL", opened: 2026-07-14, careers: "https://www.voloridge.com/join-our-team", small: true}
+        - {name: Trexquant, aliases: [Trexquant Investment], where: "Stamford, CT", careers: "https://trexquant.com/careers", small: true}
+        - {name: Seven Eight Capital, where: New York, careers: "https://www.seveneightcapital.com/join-us", small: true}
+        - {name: Squarepoint Capital, aliases: [Squarepoint], where: "New York, London", canada: Montreal, careers: "https://www.squarepoint-capital.com/early-careers"}
+        - {name: G-Research, board: "workday:https://gresearch.wd103.myworkdayjobs.com/G-Research", where: London, opened: 2026-07-23, careers: "https://www.gresearch.co.uk/join-us/graduates/"}
+        - {name: Qube Research & Technologies, aliases: [QRT], where: "London, New York"}
+        - {name: Campbell & Company, aliases: [Campbell and Company], where: "Baltimore, MD", small: true}
+        - {name: Quantlab, where: Houston, careers: "https://www.quantlab.com/careers", small: true}
+        - {name: Cubist Systematic Strategies, aliases: [Cubist], where: New York, careers: "https://careers.point72.com/?experience=internships", note: "Point72's systematic arm"}
+        - {name: Seven Research, board: greenhouse:sevenresearch, where: New York, careers: "https://www.sevenresearch.com/careers", small: true}
+        - {name: Man Group, aliases: [Man AHL], board: greenhouse:mangroup, where: "London, New York"}
+        - {name: Engineers Gate, board: greenhouse:engineersgate, where: New York, opened: 2026-10-06, careers: "https://boards.greenhouse.io/engineersgate", small: true}
+        - {name: GSA Capital, where: New York, careers: "https://www.gsacapital.com/?section=careers", small: true}
+        - {name: Xantium, board: greenhouse:xantium, where: "London, New York", opened: 2026-08-17, small: true}
+    - id: multi-manager
+      name: Multi-manager funds (pod shops)
+      blurb: Many independent trading teams ("pods") under one roof. Hire quant researchers, quant developers and
+        software engineers, plus analysts for fundamental teams.
+      firms:
+        - {name: Citadel, where: "Chicago, New York, Miami", opened: 2026-07-01, careers: "https://www.citadel.com/careers/open-opportunities/students/internships/", note: "The hedge fund; Citadel Securities is the market maker"}
+        - {name: Millennium, aliases: [Millennium Management], where: New York, careers: "https://www.mlp.com/job-listings/"}
+        - {name: Point72, board: greenhouse:point72, where: "New York, Stamford", opened: 2026-03-02}
+        - {name: Balyasny Asset Management, aliases: [Balyasny, BAM], where: "Chicago, New York"}
+        - {name: Schonfeld, board: greenhouse:schonfeld, where: "New York, Miami", opened: 2026-09-04, careers: "https://www.schonfeld.com/careers/"}
+        - {name: Walleye Capital, aliases: [Quantic], board: greenhouse:walleyecapital-external-students, where: "New York, Boston, Miami", opened: 2026-06-10, note: "Quantic is its systematic arm"}
+        - {name: Jain Global, board: "workday:https://jainglobal.wd5.myworkdayjobs.com/ExternalSite", where: New York, opened: 2026-06-13, careers: "https://jainglobal.wd5.myworkdayjobs.com/ExternalSite", note: Summer 2027 New York roles went up in October}
+        - {name: ExodusPoint, board: greenhouse:exoduspoint, where: New York, opened: 2026-09-14, careers: "https://boards.greenhouse.io/exoduspoint"}
+        - {name: Verition Fund Management, aliases: [Verition], where: "Greenwich, CT", opened: 2026-08-19, careers: "https://www.verition.com/open-positions", small: true}
+        - {name: Capstone Investment Advisors, board: greenhouse:capstoneinvestmentadvisors, where: "New York, London", opened: 2026-09-30, careers: "https://boards.greenhouse.io/capstoneinvestmentadvisors"}
+        - {name: Marshall Wace, board: greenhouse:mwinternshipprogram, where: "London, New York", opened: 2026-07-06, careers: "https://www.mwam.com/join-us/internships/"}
+    - id: macro
+      name: Macro, relative-value & equity funds
+      blurb: Funds that bet on interest rates, currencies, commodities or individual companies. Hire research
+        analysts and quant developers; many also want economics or finance coursework.
+      firms:
+        - {name: Bridgewater Associates, aliases: [Bridgewater], board: greenhouse:bridgewater89, where: "Westport, CT", careers: "https://www.bridgewater.com/working-at-bridgewater/job-openings"}
+        - {name: Brevan Howard, where: "New York, London", opened: 2026-09-07, careers: "https://wd3.myworkdaysite.com/recruiting/brevanhoward/BH_ExternalCareers"}
+        - {name: Tudor Investment, aliases: [Tudor Investment Corporation, Tudor Group], where: "Stamford, New York", board: greenhouse:tudorgroup}
+        - {name: Garda Capital Partners, board: greenhouse:gardacp, where: New York, opened: 2026-08-18, careers: "https://boards.greenhouse.io/gardacp", small: true}
+        - {name: Capula, aliases: [Capula Investment Management], where: London, opened: 2026-08-08, careers: "https://apply.workable.com/capula-investment-management-ltd/", small: true}
+        - {name: Viking Global, aliases: [Viking Global Investors], board: greenhouse:vikingglobalinvestors, where: New York, opened: 2026-09-21, careers: "https://boards.greenhouse.io/vikingglobalinvestors"}
+        - {name: AXQ Capital, board: greenhouse:axq, where: New York, opened: 2026-09-03, careers: "https://boards.greenhouse.io/axq", small: true}
+        - {name: Anthelion Capital, board: ashby:anthelioncap, where: New York, careers: "https://jobs.ashbyhq.com/anthelioncap", small: true}
+        - {name: Weiss Asset Management, board: greenhouse:weissassetmanagement, where: Boston, opened: 2026-03-06, careers: "https://boards.greenhouse.io/weissassetmanagement", small: true}
+    - id: canada
+      name: Canadian trading desks & pension funds
+      blurb: The quant market that runs on co-op terms. Bank trading floors in Toronto, and some of the world's
+        largest pension investors (Ontario Teachers', CPP Investments, PSP, CDPQ), hire students for
+        quant, trading, risk and investment roles every term.
+      firms:
+        - {name: RBC Capital Markets, aliases: [Royal Bank of Canada, RBC], board: "workday:https://rbc.wd3.myworkdayjobs.com/RBCEARLYTALENT1", where: Toronto, opened: 2026-08-07}
+        - {name: TD Securities, aliases: [TD Bank, TD], board: "workday:https://td.wd3.myworkdayjobs.com/TD_Bank_Careers", where: Toronto, opened: 2026-08-31}
+        - {name: BMO Capital Markets, aliases: [Bank of Montreal, BMO], board: "workday:https://bmo.wd3.myworkdayjobs.com/Campus", where: Toronto, opened: 2026-09-14}
+        - {name: CIBC Capital Markets, aliases: [CIBC], board: "workday:https://cibc.wd3.myworkdayjobs.com/campus", where: Toronto, opened: 2026-09-14, careers: "https://cibc.wd3.myworkdayjobs.com/campus"}
+        - {name: Scotiabank Global Banking and Markets, aliases: [Scotiabank, Bank of Nova Scotia], board: successfactors:jobs.scotiabank.com, where: Toronto}
+        - {name: National Bank Financial, aliases: [National Bank of Canada, National Bank], where: "Montreal, Toronto"}
+        - {name: Ontario Teachers' Pension Plan, aliases: [OTPP, Ontario Teachers], board: "workday:https://otppb.wd3.myworkdayjobs.com/OntarioTeachers_Careers", where: Toronto, opened: 2026-08-21}
+        - {name: CPP Investments, aliases: [CPPIB, Canada Pension Plan Investment Board], where: Toronto}
+        - {name: OMERS, board: "workday:https://omers.wd3.myworkdayjobs.com/OMERS_External", where: Toronto}
+        - {name: HOOPP, aliases: [Healthcare of Ontario Pension Plan], where: Toronto, small: true}
+        - {name: PSP Investments, board: "workday:https://investpsp.wd3.myworkdayjobs.com/psp_careers", where: Montreal}
+        - {name: CDPQ, aliases: [Caisse de dépôt et placement du Québec], board: "workday:https://cdpq.wd10.myworkdayjobs.com/CDPQ", where: Montreal}
+        - {name: AIMCo, aliases: [Alberta Investment Management Corporation], board: "workday:https://aimco.wd10.myworkdayjobs.com/AIMCoCareers", where: "Edmonton, Calgary", opened: 2026-08-26, small: true}
+        - {name: BCI, aliases: [British Columbia Investment, British Columbia Investment Management Corporation], board: "workday:https://bci.wd10.myworkdayjobs.com/BCI_Careers", where: "Victoria, Vancouver", small: true}
+        - {name: Mackenzie Investments, where: Toronto, opened: 2026-08-26, careers: "https://careersen-mackenzieinvestments.icims.com/jobs", small: true}
+        - {name: Manulife Investment Management, aliases: [Manulife, Manulife Financial], board: "workday:https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs", where: Toronto, opened: 2026-08-31}
+        - {name: Picton Mahoney Asset Management, aliases: [Picton Mahoney], where: Toronto, careers: "https://pictonmahoney.bamboohr.com/careers", small: true}
+        - {name: "Connor, Clark & Lunn", aliases: [CC&L, Connor Clark and Lunn], where: "Vancouver, Toronto", small: true}
+        - {name: Agentis Capital, board: ashby:Agentis-Capital-Advisors, where: "Toronto, Vancouver", careers: "https://jobs.ashbyhq.com/Agentis-Capital-Advisors", small: true}
+        - {name: CMC Markets, board: "workday:https://cmcmarkets.wd3.myworkdayjobs.com/CMC_Markets_Careers", where: "Toronto, London", careers: "https://cmcmarkets.wd3.myworkdayjobs.com/CMC_Markets_Careers", small: true}
+        - {name: IMCO, aliases: [Investment Management Corporation of Ontario], board: "workday:https://imcoinvest.wd3.myworkdayjobs.com/IMCO", where: Toronto, small: true}
+        - {name: Desjardins, aliases: [Desjardins Group], board: "workday:https://desjardins.wd10.myworkdayjobs.com/Desjardins", where: "Montreal, Quebec City"}
+    - id: crypto
+      name: Crypto trading & market making
+      blurb: Market makers and trading desks for digital assets. Similar roles to prop trading, often with smaller
+        teams and more ownership early on.
+      firms:
+        - {name: Wintermute, board: lever:wintermute-trading, where: "London, New York", small: true}
+        - {name: Keyrock, board: ashby:keyrock, where: "Brussels, London", careers: "https://jobs.ashbyhq.com/keyrock", small: true}
+        - {name: Cumberland, aliases: [Cumberland DRW], where: Chicago, note: "DRW's crypto trading firm", small: true}
+        - {name: GSR, aliases: [GSR Markets], where: "London, New York", small: true}
+        - {name: B2C2, where: London, small: true}
+        - {name: Galaxy, aliases: [Galaxy Digital], board: greenhouse:galaxydigitalservices, where: New York, careers: "https://boards.greenhouse.io/galaxydigitalservices"}
+        - {name: FalconX, where: "San Mateo, New York", small: true}
+    - id: infrastructure
+      name: Exchanges & market infrastructure
+      blurb: The exchanges, clearing houses, brokers and data firms that every trade goes through. Mostly software,
+        data and risk roles, and the interviews are less brutal than at trading firms.
+      firms:
+        - {name: CME Group, board: "workday:https://cmegroup.wd1.myworkdayjobs.com/cme_careers", where: "Chicago, New York", careers: "https://cmegroup.wd1.myworkdayjobs.com/cme_careers"}
+        - {name: Cboe, aliases: [Cboe Global Markets], board: "workday:https://cboe.wd1.myworkdayjobs.com/External_Career_CBOE", where: Chicago, careers: "https://cboe.wd1.myworkdayjobs.com/External_Career_CBOE"}
+        - {name: Nasdaq, board: "workday:https://nasdaq.wd1.myworkdayjobs.com/Global_External_Site", where: "New York", canada: "Toronto, St. John's", careers: "https://nasdaq.wd1.myworkdayjobs.com/Global_External_Site"}
+        - {name: Intercontinental Exchange, aliases: [ICE], where: "New York, Atlanta", careers: "https://careers-ice.icims.com/jobs"}
+        - {name: TMX Group, board: "workday:https://tmx.wd3.myworkdayjobs.com/TMX_Careers", where: Toronto, canada: Toronto, careers: "https://tmx.wd3.myworkdayjobs.com/TMX_Careers", note: Runs the Toronto Stock Exchange}
+        - {name: OCC, aliases: [Options Clearing Corporation], board: "workday:https://theocc.wd5.myworkdayjobs.com/careers", where: Chicago, opened: 2026-09-17, careers: "https://theocc.wd5.myworkdayjobs.com/careers"}
+        - {name: DTCC, where: "New York, Tampa, Dallas", opened: 2026-08-25}
+        - {name: Interactive Brokers, board: greenhouse:ibkr, where: "Greenwich, CT"}
+        - {name: Clearwater Analytics, aliases: [CWAN], board: "workday:https://clearwateranalytics.wd1.myworkdayjobs.com/Clearwater_Analytics_Careers", where: "Boise, New York", careers: "https://clearwateranalytics.wd1.myworkdayjobs.com/Clearwater_Analytics_Careers"}
+        - {name: SS&C, aliases: [SS&C Technologies], board: "workday:https://ssctech.wd1.myworkdayjobs.com/ssctechnologies", where: "Windsor, CT", canada: Toronto, careers: "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies"}
+        - {name: Tradeweb, where: "New York, Jersey City, London", opened: 2026-09-24, careers: "https://ecnf.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX"}
+        - {name: S&P Global, board: "workday:https://spgi.wd5.myworkdayjobs.com/SPGI_Careers", where: New York, careers: "https://spgi.wd5.myworkdayjobs.com/SPGI_Careers"}
+    - id: commodities
+      name: Energy & commodity trading
+      blurb: The trading arms of energy companies and the big commodity houses. They trade oil, gas, power and
+        metals and hire quant analysts and developers, often in Houston and London. Few students look here.
+      firms:
+        - {name: BP, aliases: [bp], board: "workday:https://bpinternational.wd3.myworkdayjobs.com/bpEarlyCareers", where: "Houston, Chicago, London", canada: Calgary, opened: 2026-06-16, note: "21 Summer 2027 internships listed, most in trading & shipping"}
+        - {name: Shell, aliases: [Shell Energy, Shell Trading], board: "workday:https://shell.wd3.myworkdayjobs.com/ShellCareers", where: "Houston, London", canada: Calgary}
+        - {name: Vitol, where: "Houston, London", small: true}
+        - {name: Trafigura, where: "Houston, London", small: true}
+        - {name: Gunvor, board: "workday:https://gunvor.wd3.myworkdayjobs.com/Gunvor_Careers", where: "Houston, London", careers: "https://gunvor.wd3.myworkdayjobs.com/Gunvor_Careers", small: true}
+        - {name: Castleton Commodities International, aliases: [Castleton Commodities, CCI], board: "workday:https://osv-cci.wd1.myworkdayjobs.com/CCICareers", where: "Stamford, Houston", opened: 2026-07-21, careers: "https://osv-cci.wd1.myworkdayjobs.com/CCICareers", small: true}
+        - {name: Louis Dreyfus Company, where: "Memphis, London", careers: "https://jobs.smartrecruiters.com/LouisDreyfusCompany", small: true}
+        - {name: Glencore, board: "workday:https://glencorecorp.wd3.myworkdayjobs.com/External", where: "New York, London", careers: "https://glencorecorp.wd3.myworkdayjobs.com/External"}
+        - {name: Mercuria, where: "Houston, Geneva", small: true}
+        - {name: Hartree Partners, where: "New York, Houston", small: true}
+        - {name: Centrica, board: "workday:https://centrica.wd3.myworkdayjobs.com/Centrica", where: "Houston, London", careers: "https://centrica.wd3.myworkdayjobs.com/Centrica", small: true}
+        - {name: Constellation Energy, aliases: [Constellation], where: "Baltimore, Chicago, Houston", careers: "https://jobs.constellationenergy.com/"}
+        - {name: Chevron, aliases: [Chevron Corporation], board: "workday:https://chevron.wd5.myworkdayjobs.com/University", where: Houston, note: Supply & Trading interns}
+        - {name: ExxonMobil, where: "Spring, TX, London", opened: 2026-08-10, careers: "https://jobs.exxonmobil.com/", note: Global Trading interns}
+    - id: asset-managers
+      name: Quant asset managers
+      blurb: Large investment firms with systematic and quant teams. More stable hours, a broad range of
+        quant, data and engineering roles, and the interviews are gentler.
+      firms:
+        - {name: BlackRock, board: "workday:https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional", where: "New York, San Francisco", canada: Toronto, opened: 2026-09-15}
+        - {name: PIMCO, board: "workday:https://pimco.wd1.myworkdayjobs.com/pimco-careers", where: "Newport Beach, New York", canada: Toronto, opened: 2026-08-20, careers: "https://pimco.wd1.myworkdayjobs.com/pimco-careers"}
+        - {name: Fidelity Investments, aliases: [Fidelity], board: "workday:https://fmr.wd1.myworkdayjobs.com/targeted", where: Boston, opened: 2026-05-28}
+        - {name: Wellington Management, board: "workday:https://wellington.wd5.myworkdayjobs.com/Campus", where: Boston, careers: "https://wellington.wd5.myworkdayjobs.com/Campus"}
+        - {name: PanAgora, aliases: [PanAgora Asset Management], board: "workday:https://empower.wd12.myworkdayjobs.com/PanAgora", where: Boston, careers: "https://empower.wd12.myworkdayjobs.com/PanAgora", small: true}
+        - {name: Blackstone, board: "workday:https://blackstone.wd1.myworkdayjobs.com/Blackstone_Campus_Careers", where: New York, opened: 2026-07-02, careers: "https://blackstone.wd1.myworkdayjobs.com/Blackstone_Campus_Careers"}
+        - {name: T. Rowe Price, board: "workday:https://troweprice.wd5.myworkdayjobs.com/TRowePrice", where: "Baltimore, New York", opened: 2026-07-23}
+        - {name: Neuberger Berman, board: "workday:https://nb.wd1.myworkdayjobs.com/NBCareers", where: "New York, Chicago", opened: 2026-09-23}
+        - {name: MFS, aliases: [MFS Investment Management], board: "workday:https://mfs.wd1.myworkdayjobs.com/MFS-Careers", where: Boston, opened: 2026-03-02}
+        - {name: Acadian Asset Management, where: Boston, opened: 2026-10-13, careers: "https://www.acadian-asset.com/careers/open-positions", small: true}
+        - {name: American Century Investments, board: "workday:https://americancentury.wd5.myworkdayjobs.com/AmericanCenturyInvestments", where: "Kansas City, New York", opened: 2026-09-16, small: true}
+    - id: bank-desks
+      name: Bank quant & strats desks
+      blurb: Quant and "strats" teams at the global investment banks. Price derivatives, build trading models and
+        write the desk's tools. Large intern classes, with recruiting in late summer.
+      firms:
+        - {name: Goldman Sachs, where: "New York, Dallas", canada: Toronto, opened: 2026-08-15, careers: "https://higher.gs.com/"}
+        - {name: JPMorgan Chase, aliases: [JP Morgan Chase, JP Morgan, JPMorgan], where: "New York, Columbus", canada: Toronto, opened: 2026-08-03}
+        - {name: Morgan Stanley, board: "workday:https://ms.wd5.myworkdayjobs.com/private", where: New York, canada: Montreal}
+        - {name: Citi, aliases: [Citigroup, Citibank], board: "workday:https://citi.wd5.myworkdayjobs.com/2", where: New York, canada: Toronto, opened: 2026-08-27}
+        - {name: Barclays, board: "workday:https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays", where: "New York, London", opened: 2026-08-14}
+        - {name: Deutsche Bank, board: "workday:https://db.wd3.myworkdayjobs.com/DBWebsite", where: "New York, London", opened: 2026-09-01}
+        - {name: Bank of America, aliases: [BofA, BofA Securities], board: "workday:https://ghr.wd1.myworkdayjobs.com/us-emplsv", where: "New York, Charlotte"}
+        - {name: Wells Fargo, where: "Charlotte, New York", opened: 2026-08-13, careers: "https://wd1.myworkdaysite.com/recruiting/wf/WellsFargoJobs", note: Quantitative Analytics interns}
+    - id: betting
+      name: Sports betting & prediction markets
+      blurb: Pricing and trading on sports and events. Probability, statistics and fast software, much like a
+        trading firm, and few quant students think to look here.
+      firms:
+        - {name: FanDuel, where: "New York", canada: Toronto}
+        - {name: DraftKings, board: "workday:https://draftkings.wd1.myworkdayjobs.com/Campus_Career_Portal", where: "Boston, New York", careers: "https://draftkings.wd1.myworkdayjobs.com/Campus_Career_Portal"}
+        - {name: PrizePicks, where: Atlanta, small: true}
+        - {name: Fanatics Betting & Gaming, where: New York}
+        - {name: Superbet, board: greenhouse:superbet, where: "London, Bucharest", careers: "https://boards.greenhouse.io/superbet", small: true}
+        - {name: Kalshi, board: ashby:kalshi, where: New York, small: true, note: Regulated prediction market}
+        - {name: Polymarket, board: ashby:polymarket, where: New York, small: true, note: Prediction market}
+
+# More fields, firm by firm. Each firm's website was checked live and its job board found from its own careers
+# page or from the postings in SimplifyJobs' list (October 2026). all_roles: every firm here is in the field,
+# so any of its internships counts (not its sales and business roles); a role_only segment holds big
+# companies with one team in the field, where only the niche's own roles count. small: a firm fewer
+# students know to apply to.
+
+ai:
+  name: "AI labs & ML infrastructure"
+  season: Summer 2027
+  blurb: >-
+    Frontier labs, the companies building products on top of models, and the infrastructure that trains and
+    serves them. Toronto, Montreal and Edmonton are research hubs with their own labs.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: AI/ML/Data
+  keywords: [machine learning, ai research, llm, inference, ml infrastructure, deep learning]
+  segments:
+    - id: frontier
+      name: Frontier labs
+      blurb: >-
+        Train the largest models. Research and engineering internships are rare and competitive.
+      firms:
+        - {name: OpenAI, board: "ashby:openai", where: San Francisco, careers: "https://openai.com"}
+        - {name: Anthropic, board: "greenhouse:anthropic", where: San Francisco, careers: "https://www.anthropic.com/careers"}
+        - {name: Google DeepMind, where: "London, Mountain View", careers: "https://deepmind.google/careers/"}
+        - {name: xAI, board: "greenhouse:xai", where: Palo Alto, opened: 2026-10-02, careers: "https://x.ai/careers", small: true}
+        - {name: Mistral AI, board: "ashby:mistral.ai", where: Paris, opened: 2026-07-24, careers: "https://mistral.ai/careers/", small: true}
+        - {name: AI21 Labs, where: Tel Aviv, careers: "https://www.ai21.com", small: true}
+    - id: applied
+      name: "Applied AI & agents"
+      blurb: >-
+        Build products on top of models (coding, search, legal, voice, video). Fast-growing, startup pace.
+      firms:
+        - {name: Perplexity, board: "ashby:perplexity", where: San Francisco, careers: "https://www.perplexity.ai", small: true}
+        - {name: Scale AI, board: "greenhouse:scaleai", where: San Francisco, opened: 2026-06-06, careers: "https://scale.com/careers", small: true}
+        - {name: Harvey, board: "ashby:harvey", where: San Francisco, opened: 2026-10-02, careers: "https://www.harvey.ai/careers", small: true}
+        - {name: Glean, board: "greenhouse:gleanwork", where: Palo Alto, opened: 2026-10-01, careers: "https://www.glean.com/careers", small: true}
+        - {name: Runway, board: "ashby:runway-ml", where: New York, careers: "https://runway.com/news/company-news/runway-openai-marketplace", small: true}
+        - {name: ElevenLabs, board: "ashby:elevenlabs", where: "London, New York", careers: "https://elevenlabs.io/careers", small: true}
+        - {name: Anysphere (Cursor), board: "ashby:cursor", where: San Francisco, careers: "https://cursor.com/careers", small: true}
+        - {name: Hebbia, board: "ashby:hebbia-ai", where: New York, careers: "https://www.hebbia.com/careers/", small: true}
+        - {name: Sierra, board: "ashby:Sierra", where: San Francisco, opened: 2026-09-01, careers: "https://sierra.ai/careers", small: true}
+        - {name: Abridge, board: "ashby:abridge", where: "Pittsburgh, San Francisco", careers: "https://jobs.ashbyhq.com/Abridge", small: true}
+        - {name: Writer, board: "ashby:writer", where: San Francisco, careers: "https://writer.com/company/careers/", small: true}
+    - id: infra
+      name: "ML infrastructure & compute"
+      blurb: >-
+        The platforms, databases and clouds that train and serve models.
+      firms:
+        - {name: Databricks, board: "greenhouse:databricks", where: San Francisco, opened: 2026-07-16, careers: "https://www.databricks.com/company/careers"}
+        - {name: Hugging Face, where: "New York, Paris", careers: "https://discord.com/invite/JfAtkvEtRb", small: true}
+        - {name: Together AI, board: "greenhouse:togetherai", where: San Francisco, opened: 2026-09-18, careers: "https://www.together.ai/careers", small: true}
+        - {name: Modal, board: "ashby:modal", where: New York, careers: "https://modal.com/careers", small: true}
+        - {name: Pinecone, board: "ashby:pinecone", where: New York, careers: "https://www.pinecone.io/careers/", small: true}
+        - {name: Anyscale, board: "ashby:anyscale", where: San Francisco, careers: "https://www.anyscale.com/events", small: true}
+        - {name: Fireworks AI, board: "ashby:fireworks", where: Redwood City, careers: "https://fireworks.ai/careers", small: true}
+        - {name: Baseten, board: "ashby:baseten", where: San Francisco, careers: "https://www.baseten.co/resources/careers/", small: true}
+        - {name: Cerebras, board: "ashby:cerebras", where: Sunnyvale, canada: Toronto, careers: "https://www.cerebras.ai/join-us", small: true}
+        - {name: Groq, where: Mountain View, canada: Toronto, careers: "https://groq.com/", small: true}
+        - {name: CoreWeave, where: New York, careers: "https://www.coreweave.com/careers", small: true}
+        - {name: Lambda, board: "ashby:lambda", where: San Francisco, opened: 2026-06-01, careers: "https://lambda.ai/careers", small: true}
+        - {name: Replicate, where: San Francisco, careers: "https://replicate.com/about#open-roles", small: true}
+    - id: canada
+      name: AI in Canada
+      role_only: true      # big companies with one team in the field
+      blurb: >-
+        Toronto, Montréal and Edmonton are AI research hubs; labs and institutes here hire co-op students.
+      firms:
+        - {name: Cohere, board: "ashby:cohere", where: "Toronto, San Francisco", careers: "https://cohere.com/careers", small: true}
+        - {name: Vector Institute, where: Toronto, careers: "https://vectorinstitute.ai/research-talent/students/", small: true}
+        - {name: Mila, where: Montréal, careers: "https://mila.quebec/en", small: true}
+        - {name: Amii, where: Edmonton, careers: "https://www.amii.ca/about/career-opportunities", small: true}
+        - {name: Layer 6, where: Toronto, careers: "https://layer6.ai/careers/", small: true}
+        - {name: Borealis AI, where: "Toronto, Montréal", careers: "https://rbcborealis.com/careers/", small: true}
+        - {name: Ada, board: "greenhouse:ada18", where: Toronto, careers: "https://www.ada.cx", small: true}
+        - {name: Coveo, where: "Québec City, Montréal", careers: "https://www.coveo.com/en/company/careers", small: true}
+
+robotics:
+  name: "Robotics, autonomy & space"
+  season: Summer 2027
+  blurb: >-
+    Self-driving, robots and humanoids, drones, aviation and space: software meets hardware. Waterloo Region has
+    some of Canada's best robotics companies a bus ride from campus.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: Hardware
+  keywords: [robotics, autonomous, autonomy, drone, self-driving, perception, aerospace, satellite, rocket, flight software]
+  segments:
+    - id: autonomy
+      name: "Self-driving & autonomy"
+      blurb: >-
+        Perception, planning and simulation for vehicles.
+      firms:
+        - {name: Waymo, board: "greenhouse:waymo", where: Mountain View, opened: 2026-08-31, careers: "https://careers.withwaymo.com"}
+        - {name: Tesla, where: "Palo Alto, Austin", opened: 2026-06-07, careers: "https://www.tesla.com"}
+        - {name: Zoox, board: "lever:zoox", where: Foster City, careers: "https://zoox.com/careers", small: true}
+        - {name: Aurora, where: Pittsburgh, careers: "https://aurora.tech/careers", small: true}
+        - {name: Nuro, board: "greenhouse:nuro", where: Mountain View, opened: 2026-06-24, careers: "https://www.nuro.ai/careers", small: true}
+        - {name: Wayve, board: "ashby:wayve", where: London, opened: 2026-06-06, careers: "https://wayve.ai/careers/", small: true}
+        - {name: Applied Intuition, board: "ashby:applied", where: Mountain View, opened: 2026-06-27, careers: "https://www.appliedintuition.com/careers", small: true}
+        - {name: Kodiak, board: "greenhouse:kodiak", where: Mountain View, careers: "https://kodiak.ai/careers", small: true}
+        - {name: Motional, where: "Boston, Pittsburgh", careers: "https://motional.com/careers", small: true}
+    - id: robots
+      name: "Robots & humanoids"
+      blurb: >-
+        Warehouse, surgical, general-purpose and humanoid robots.
+      firms:
+        - {name: Boston Dynamics, board: "workday:https://bostondynamics.wd1.myworkdayjobs.com/Boston_Dynamics", where: "Waltham, MA", careers: "https://bostondynamics.com/careers/"}
+        - {name: Figure, board: "greenhouse:figureai", where: San Jose, opened: 2026-10-14, careers: "https://www.figure.ai/careers", small: true}
+        - {name: Agility Robotics, where: "Salem, OR", careers: "https://www.agilityrobotics.com/careers", small: true}
+        - {name: 1X, board: "ashby:1x", where: "Palo Alto, Oslo", careers: "https://www.1x.tech/careers", small: true}
+        - {name: Physical Intelligence, board: "ashby:physicalintelligence", where: San Francisco, careers: "https://www.pi.website/join-us", small: true}
+        - {name: Dexterity, where: Redwood City, careers: "https://www.dexterity.ai", small: true}
+        - {name: Symbotic, board: "workday:https://symbotic.wd504.myworkdayjobs.com/Symbotic", where: "Wilmington, MA", opened: 2026-09-21, careers: "https://www.symbotic.com/careers/", small: true}
+        - {name: Intuitive Surgical, where: Sunnyvale, careers: "https://www.intuitive.com/careers", small: true}
+        - {name: Anduril, board: "greenhouse:andurilindustries", where: Costa Mesa, opened: 2026-06-11, careers: "https://www.anduril.com/careers", small: true}
+    - id: aero
+      name: "Drones, aviation & space"
+      blurb: >-
+        Drones, electric aircraft, rockets and satellites.
+      firms:
+        - {name: SpaceX, board: "greenhouse:spacex", where: "Hawthorne, Starbase", opened: 2026-08-03, careers: "https://www.spacex.com/careers"}
+        - {name: Skydio, board: "ashby:skydio", where: San Mateo, opened: 2026-09-04, careers: "https://www.skydio.com/solutions/dfr/campus-police", small: true}
+        - {name: Zipline, where: South San Francisco, opened: 2026-08-18, careers: "https://www.zipline.com/careers", small: true}
+        - {name: Joby Aviation, where: Santa Cruz, careers: "https://www.jobyaviation.com/careers", small: true}
+        - {name: Relativity Space, board: "greenhouse:relativity", where: Long Beach, careers: "https://www.relativityspace.com/careers", small: true}
+        - {name: Rocket Lab, board: "greenhouse:rocketlab", where: Long Beach, opened: 2026-09-10, careers: "https://rocketlabcorp.com/careers/", small: true}
+    - id: canada
+      name: In Canada
+      blurb: >-
+        Waterloo Region, Toronto and Montréal have strong robotics and space companies that hire co-op students.
+      firms:
+        - {name: Clearpath Robotics, where: Kitchener, careers: "https://clearpathrobotics.com/robotics-careers/", small: true}
+        - {name: Avidbots, where: Kitchener, careers: "https://avidbots.com/company/careers/", small: true}
+        - {name: Miovision, board: "ashby:miovision", where: Kitchener, careers: "https://miovision.com/company/careers/", small: true}
+        - {name: Waabi, board: "lever:waabi", where: Toronto, careers: "https://waabi.ai/careers", small: true}
+        - {name: Kinova, where: Montréal, careers: "https://www.kinovarobotics.com/career", small: true}
+        - {name: Sanctuary AI, where: Vancouver, careers: "https://sanctuary.ai/careers/", small: true}
+        - {name: Vention, where: Montréal, careers: "https://vention.com/careers", small: true}
+        - {name: MDA Space, where: "Brampton, Montréal", careers: "https://mda.space/careers", small: true}
+        - {name: Kepler Communications, board: "lever:kepler", where: Toronto, careers: "https://kepler.space/careers/", small: true}
+
+hardware:
+  name: "Chips & hardware"
+  season: Summer 2027
+  blurb: >-
+    Chip makers, AI accelerator startups and design-tool companies, plus the Waterloo, Toronto and Ottawa
+    hardware companies that hire ECE and CS co-ops every term.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: Hardware
+  keywords: [semiconductor, asic, fpga, silicon, chip, verification, firmware, embedded, hardware]
+  segments:
+    - id: chips
+      name: Chip makers
+      blurb: >-
+        CPUs, GPUs, networking and analog chips. Big co-op programs, many in Toronto, Markham and Ottawa.
+      firms:
+        - {name: NVIDIA, board: "workday:https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite", where: Santa Clara, canada: Toronto, opened: 2026-06-08, careers: "https://www.nvidia.com/en-us/about-nvidia/careers/"}
+        - {name: AMD, where: Santa Clara, canada: Markham, opened: 2026-08-21, careers: "https://www.amd.com/en/corporate/careers.html"}
+        - {name: Intel, board: "workday:https://intel.wd1.myworkdayjobs.com/External", where: Santa Clara, canada: Toronto, opened: 2026-06-11, careers: "https://www.intel.com"}
+        - {name: Qualcomm, where: San Diego, canada: Markham, opened: 2026-08-05, careers: "https://www.qualcomm.com/company/careers"}
+        - {name: Broadcom, board: "workday:https://broadcom.wd1.myworkdayjobs.com/external_career", where: Palo Alto, careers: "https://www.broadcom.com/company/careers", small: true}
+        - {name: Marvell, board: "workday:https://marvell.wd1.myworkdayjobs.com/MarvellCareers2", where: Santa Clara, opened: 2026-06-27, careers: "https://www.marvell.com", small: true}
+        - {name: Micron, aliases: [Micron Technology], board: "workday:https://micron.wd1.myworkdayjobs.com/External", where: Boise, opened: 2026-08-19, careers: "https://www.micron.com/about/careers", small: true}
+        - {name: Texas Instruments, where: Dallas, opened: 2026-06-17, careers: "https://careers.ti.com/en/sites/CX", small: true}
+        - {name: Analog Devices, board: "workday:https://analogdevices.wd1.myworkdayjobs.com/External", where: "Wilmington, MA", canada: Toronto, opened: 2026-09-23, careers: "https://www.analog.com", small: true}
+        - {name: Ampere Computing, where: Santa Clara, careers: "https://amperecomputing.com", small: true}
+        - {name: Astera Labs, board: "greenhouse:asteraearlycareer2027", where: San Jose, canada: "Toronto, Vancouver", opened: 2026-06-02, careers: "https://www.asteralabs.com/careers/", small: true}
+        - {name: NXP Semiconductors, board: "workday:https://nxp.wd3.myworkdayjobs.com/careers", where: "Austin, Chandler, San Jose", opened: 2026-06-23, careers: "https://www.nxp.com/company/about-nxp/careers:CAREERS", small: true}
+        - {name: Microchip Technology, where: "Chandler, Houston, Boulder", opened: 2026-06-12, careers: "https://www.microchip.com/en-us/about/careers", small: true}
+        - {name: Western Digital, where: "San Jose, Rochester, Irvine", opened: 2026-07-20, careers: "https://www.westerndigital.com/company/careers", small: true}
+        - {name: Qorvo, where: "Richardson, Greensboro, Chelmsford", opened: 2026-08-31, careers: "https://www.qorvo.com/careers", small: true}
+        - {name: KLA, board: "workday:https://kla.wd1.myworkdayjobs.com/UR", where: "Milpitas, Ann Arbor, Austin", opened: 2026-06-30, careers: "https://www.kla.com/careers", small: true}
+        - {name: Lumentum, board: "workday:https://lumentum.wd5.myworkdayjobs.com/LITE", where: "San Jose, Daventry", canada: Ottawa, opened: 2026-10-06, careers: "https://www.lumentum.com/en/careers", small: true}
+        - {name: Cirrus Logic, where: "Austin, Edinburgh, Greensboro", opened: 2026-10-05, careers: "https://www.cirrus.com/careers/", small: true}
+        - {name: Keysight Technologies, where: "Santa Rosa, Colorado Springs, Santa Clara", opened: 2026-06-08, careers: "https://www.keysight.com/us/en/about/careers.html", small: true}
+    - id: ai_chips
+      name: "AI chips & new architectures"
+      blurb: >-
+        Startups building accelerators for AI. Small teams, hard problems.
+      firms:
+        - {name: Cerebras, board: "ashby:cerebras", where: Sunnyvale, canada: Toronto, careers: "https://www.cerebras.ai/join-us", small: true}
+        - {name: Groq, where: Mountain View, canada: Toronto, careers: "https://groq.com/", small: true}
+        - {name: SambaNova Systems, where: Palo Alto, careers: "https://sambanova.ai/company/careers", small: true}
+        - {name: Etched, board: "ashby:Etched", where: San Jose, opened: 2026-05-20, careers: "https://www.etched.com/join", small: true}
+        - {name: Lightmatter, board: "greenhouse:lightmatter", where: Boston, opened: 2026-06-10, careers: "https://lightmatter.com/people/careers/", small: true}
+        - {name: d-Matrix, board: "ashby:d-Matrix", where: Santa Clara, canada: Toronto, careers: "https://www.d-matrix.ai/careers/", small: true}
+        - {name: SiFive, board: "workday:https://sifive.wd1.myworkdayjobs.com/sifivecareers", where: San Mateo, careers: "https://www.sifive.com/careers", small: true}
+        - {name: Tenstorrent, board: "greenhouse:tenstorrentuniversity", where: Santa Clara, canada: Toronto, opened: 2026-10-06, careers: "https://tenstorrent.com/careers", small: true}
+        - {name: Untether AI, canada: Toronto, careers: "https://www.untether.ai", small: true}
+    - id: eda
+      name: "Design tools (EDA) & IP"
+      blurb: >-
+        The software chips are designed with, and the processor designs others license.
+      firms:
+        - {name: Synopsys, where: Sunnyvale, canada: Ottawa, careers: "https://careers.synopsys.com/", small: true}
+        - {name: Cadence, aliases: [Cadence Design Systems], board: "workday:https://cadence.wd1.myworkdayjobs.com/External_Careers", where: San Jose, canada: Ottawa, opened: 2026-06-04, careers: "https://www.cadence.com/en_US/home/company/life-at-cadence/careers.html", small: true}
+        - {name: Arm, where: "Cambridge UK, Austin", careers: "https://careers.arm.com/", small: true}
+    - id: canada
+      name: In Canada
+      role_only: true      # big companies with one team in the field
+      blurb: >-
+        Waterloo, Toronto and Ottawa hardware, embedded and networking companies that hire co-op students.
+      firms:
+        - {name: BlackBerry QNX, where: "Ottawa, Waterloo", careers: "https://blackberry.qnx.com", small: true}
+        - {name: Ciena, board: "workday:https://ciena.wd5.myworkdayjobs.com/Careers", where: Ottawa, opened: 2026-06-03, careers: "https://www.ciena.com/careers", small: true}
+        - {name: Nokia, where: Ottawa, opened: 2026-09-03, careers: "https://www.nokia.com/industries/enterprise-it-infrastructure/", small: true}
+        - {name: Christie Digital, where: Kitchener, careers: "https://www.christiedigital.com/about/careers/", small: true}
+        - {name: Teledyne DALSA, where: Waterloo, careers: "https://www.teledynedalsa.com/en/company/dalsa-careers/", small: true}
+        - {name: ecobee, where: Toronto, careers: "https://careers.generac.com/en/brands/ecobee/", small: true}
+
+fintech:
+  name: Fintech
+  season: Summer 2027
+  blurb: >-
+    Payments, banking apps, investing and the infrastructure behind money moving, with Toronto's fintechs and
+    payment networks.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: Software
+  keywords: [fintech, payments, banking, lending, brokerage, crypto]
+  segments:
+    - id: payments
+      name: "Payments & infrastructure"
+      blurb: >-
+        Move money for businesses (cards, APIs, treasury).
+      firms:
+        - {name: Stripe, board: "greenhouse:stripe", where: San Francisco, canada: Toronto, opened: 2026-09-30, careers: "https://stripe.com/en-ca/careers"}
+        - {name: Plaid, board: "ashby:plaid", where: "San Francisco, New York", careers: "https://plaid.com/careers/", small: true}
+        - {name: Ramp, board: "ashby:ramp", where: New York, careers: "https://ramp.com/careers", small: true}
+        - {name: Brex, where: San Francisco, careers: "https://www.brex.com/careers", small: true}
+        - {name: Mercury, board: "greenhouse:mercury", where: San Francisco, careers: "https://mercury.com/jobs", small: true}
+        - {name: Modern Treasury, board: "ashby:moderntreasury", where: San Francisco, careers: "https://www.moderntreasury.com/about#careers", small: true}
+        - {name: Marqeta, where: Oakland, careers: "https://www.marqeta.com/company/careers", small: true}
+        - {name: Block, where: Oakland, careers: "https://block.xyz/careers/jobs"}
+        - {name: Wise, where: London, careers: "https://wise.jobs/", small: true}
+    - id: consumer
+      name: "Banking & investing apps"
+      blurb: >-
+        Neobanks, brokerages and personal finance apps.
+      firms:
+        - {name: Affirm, board: "greenhouse:affirm", where: San Francisco, opened: 2026-10-02, careers: "https://www.affirm.com/careers", small: true}
+        - {name: Robinhood, board: "greenhouse:robinhood", where: Menlo Park, opened: 2026-09-14, careers: "https://careers.robinhood.com/?"}
+        - {name: Coinbase, board: "greenhouse:coinbase", where: Remote, opened: 2026-09-09, careers: "https://www.coinbase.com/en-ca/careers"}
+        - {name: Chime, where: San Francisco, careers: "https://www.chime.com", small: true}
+        - {name: Revolut, where: London, careers: "https://www.revolut.com", small: true}
+        - {name: Klarna, where: Stockholm, careers: "https://www.klarna.com/careers/", small: true}
+    - id: canada
+      name: In Canada
+      blurb: >-
+        Toronto and Montréal fintechs and payment networks that hire co-op students.
+      firms:
+        - {name: Wealthsimple, board: "ashby:wealthsimple", where: Toronto, careers: "https://www.wealthsimple.com/en-ca/careers", small: true}
+        - {name: Questrade, where: Toronto, careers: "https://www.questrade.com/about-us/careers", small: true}
+        - {name: KOHO, board: "ashby:koho", where: Toronto, careers: "https://www.koho.ca/careers/", small: true}
+        - {name: Float, board: "ashby:Float", where: Toronto, careers: "https://floatfinancial.com/careers", small: true}
+        - {name: Wave, where: Toronto, careers: "https://www.waveapps.com/about-us/culture", small: true}
+        - {name: Interac, board: "workday:https://interac.wd3.myworkdayjobs.com/Interac", where: Toronto, opened: 2026-07-17, careers: "https://www.interac.ca/en/company/careers/careers-at-interac/", small: true}
+        - {name: Moneris, board: "workday:https://moneris.wd3.myworkdayjobs.com/Moneris", where: Toronto, careers: "https://www.moneris.com/en/careers/careers-hub", small: true}
+        - {name: Nuvei, where: Montréal, careers: "https://www.nuvei.com/careers", small: true}
+        - {name: Neo Financial, where: Calgary, careers: "https://www.neofinancial.com/campus-cashback", small: true}
+
+devtools:
+  name: "Developer tools & cloud"
+  season: Summer 2027
+  blurb: >-
+    The tools developers use every day, the databases they build on and the clouds they deploy to.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: Software
+  keywords: [developer tools, devtools, infrastructure, compiler, database, cloud, platform engineer]
+  segments:
+    - id: tools
+      name: Developer tools
+      blurb: >-
+        Editors, collaboration, testing, monitoring and internal-tool builders.
+      firms:
+        - {name: Datadog, board: "greenhouse:datadog", where: New York, opened: 2026-08-17, careers: "https://careers.datadoghq.com"}
+        - {name: Temporal, where: "Seattle, Remote", careers: "https://temporal.io/careers", small: true}
+        - {name: Retool, where: San Francisco, careers: "https://retool.com/careers", small: true}
+        - {name: Postman, where: San Francisco, careers: "https://www.postman.com/company/careers/", small: true}
+        - {name: Sentry, board: "ashby:sentry", where: San Francisco, canada: Toronto, opened: 2026-08-11, careers: "https://sentry.io/careers/", small: true}
+        - {name: Linear, board: "ashby:linear", where: Remote, careers: "https://linear.app/careers", small: true}
+        - {name: Grafana Labs, board: "greenhouse:grafanalabs", where: Remote, careers: "https://grafana.com/careers/", small: true}
+        - {name: Snyk, board: "workday:https://snyk.wd103.myworkdayjobs.com/External", where: "Boston, London", careers: "https://snyk.io/careers/", small: true}
+        - {name: Replit, board: "ashby:replit", where: San Francisco, opened: 2026-08-15, careers: "https://replit.com/careers", small: true}
+        - {name: Docker, where: Remote, careers: "https://www.docker.com/careers/", small: true}
+        - {name: GitLab, board: "greenhouse:gitlab", where: Remote, careers: "https://about.gitlab.com/jobs/", small: true}
+    - id: data
+      name: "Databases & data"
+      blurb: >-
+        Databases, streaming and analytics engines.
+      firms:
+        - {name: Supabase, board: "ashby:supabase", where: Remote, careers: "https://supabase.com/careers", small: true}
+        - {name: PlanetScale, board: "greenhouse:planetscale", where: Remote, careers: "https://planetscale.com/careers", small: true}
+        - {name: Neon, where: Remote, careers: "https://www.databricks.com/company/careers", small: true}
+        - {name: ClickHouse, where: Remote, careers: "https://clickhouse.com/company/careers", small: true}
+        - {name: Cockroach Labs, where: New York, canada: Toronto, careers: "https://www.cockroachlabs.com/careers/", small: true}
+        - {name: Confluent, where: "Mountain View, Remote", careers: "https://careers.confluent.io/", small: true}
+        - {name: MongoDB, board: "greenhouse:mongodb", where: New York, canada: Toronto, careers: "https://www.mongodb.com/students", small: true}
+        - {name: Snowflake, board: "ashby:snowflake", where: San Mateo, canada: Toronto, careers: "https://www.snowflake.com/en/news/press-releases/jeff-naughton-joins-snowflake/"}
+    - id: cloud
+      name: "Cloud & platforms"
+      blurb: >-
+        Hosting, networking, security and deployment platforms.
+      firms:
+        - {name: Vercel, board: "greenhouse:vercel", where: "San Francisco, Remote", opened: 2026-09-08, careers: "https://vercel.com/careers", small: true}
+        - {name: Cloudflare, board: "greenhouse:cloudflare", where: "San Francisco, Austin", careers: "https://www.cloudflare.com/careers/"}
+        - {name: HashiCorp, where: "San Francisco, Remote", careers: "https://www.hashicorp.com/en/careers", small: true}
+        - {name: Fly.io, where: Remote, careers: "https://fly.io/jobs/", small: true}
+        - {name: Render, board: "ashby:render", where: San Francisco, careers: "https://render.com/docs/cronjobs", small: true}
+        - {name: Tailscale, where: Remote, canada: Toronto, careers: "https://tailscale.com/careers", small: true}
+
+waterloo-toronto:
+  name: "Waterloo & Toronto startups"
+  season: Summer 2027
+  blurb: >-
+    Startups and scale-ups in Waterloo Region and Toronto (and a few across Canada) that hire co-op students,
+    many of them founded by Waterloo alumni.
+  all_roles: true          # every firm here is in the field: any internship there counts
+  category: ""
+  keywords: []
+  segments:
+    - id: waterloo
+      name: Waterloo Region
+      blurb: >-
+        Kitchener-Waterloo companies, a short walk or bus from campus.
+      firms:
+        - {name: ApplyBoard, board: "workday:https://applyboard.wd3.myworkdayjobs.com/ApplyBoardNH", where: Kitchener, careers: "https://www.applyboard.com/studyabroad", small: true}
+        - {name: Vidyard, where: Kitchener, careers: "https://www.vidyard.com/case-studies/video-drives-new-abm-opportunities/", small: true}
+        - {name: Axonify, where: Waterloo, careers: "https://axonify.com/careers/", small: true}
+        - {name: Dejero, where: Waterloo, careers: "https://www.dejero.com/career/", small: true}
+        - {name: Arctic Wolf, board: "workday:https://arcticwolf.wd1.myworkdayjobs.com/External", where: Waterloo, careers: "https://arcticwolf.com/company/careers/", small: true}
+        - {name: D2L, where: Kitchener, careers: "https://www.d2l.com/solutions/k-12/student-success-and-early-intervention/", small: true}
+        - {name: Mappedin, where: Waterloo, careers: "https://www.mappedin.com/careers/", small: true}
+        - {name: Auvik, board: "greenhouse:auviknetworks", where: Waterloo, careers: "https://www.auvik.com/careers/", small: true}
+        - {name: Bridgit, where: Kitchener, careers: "https://gobridgit.com/careers/", small: true}
+        - {name: Magnet Forensics, board: "lever:magnetforensics", where: Waterloo, careers: "https://www.magnetforensics.com/careers-at-magnet/", small: true}
+        - {name: Faire, board: "greenhouse:faire", where: San Francisco, canada: Kitchener, careers: "https://www.faire.com/en-ca/careers", small: true}
+        - {name: Miovision, board: "ashby:miovision", where: Kitchener, careers: "https://miovision.com/company/careers/", small: true}
+        - {name: Avidbots, where: Kitchener, careers: "https://avidbots.com/company/careers/", small: true}
+    - id: toronto
+      name: Toronto
+      blurb: >-
+        Toronto startups and scale-ups.
+      firms:
+        - {name: Wealthsimple, board: "ashby:wealthsimple", where: Toronto, careers: "https://www.wealthsimple.com/en-ca/careers", small: true}
+        - {name: Cohere, board: "ashby:cohere", where: Toronto, careers: "https://cohere.com/careers", small: true}
+        - {name: 1Password, board: "ashby:1password", where: Remote, canada: Toronto, careers: "https://1password.com/careers", small: true}
+        - {name: Ada, board: "greenhouse:ada18", where: Toronto, careers: "https://www.ada.cx", small: true}
+        - {name: League, board: "greenhouse:leagueinc", where: Toronto, careers: "https://league.com", small: true}
+        - {name: Top Hat, where: Toronto, careers: "https://tophat.com/features/ace-ai/", small: true}
+        - {name: FreshBooks, where: Toronto, careers: "https://www.freshbooks.com/careers", small: true}
+        - {name: Rose Rocket, where: Toronto, careers: "https://www.roserocket.com/careers", small: true}
+        - {name: PolicyMe, board: "lever:policyme", where: Toronto, careers: "https://www.policyme.com/careers", small: true}
+        - {name: Clutch, where: Toronto, careers: "https://www.clutch.ca/careers", small: true}
+        - {name: Waabi, board: "lever:waabi", where: Toronto, careers: "https://waabi.ai/careers", small: true}
+        - {name: Tailscale, where: Remote, canada: Toronto, careers: "https://tailscale.com/careers", small: true}
+    - id: canada
+      name: Across Canada
+      blurb: >-
+        Canadian scale-ups in Montréal, Ottawa, Vancouver, Calgary and Edmonton.
+      firms:
+        - {name: Shopify, where: "Ottawa, Toronto, Remote", careers: "https://www.shopify.com/careers"}
+        - {name: Hopper, where: Montréal, careers: "https://hopper.com/careers", small: true}
+        - {name: Clio, board: "workday:https://clio.wd3.myworkdayjobs.com/ClioCareerSite", where: "Vancouver, Toronto", careers: "https://www.clio.com", small: true}
+        - {name: Dapper Labs, where: Vancouver, careers: "https://www.dapperlabs.com/careers", small: true}
+        - {name: Thinkific, board: "ashby:thinkific", where: Vancouver, careers: "https://www.thinkific.com/careers/", small: true}
+        - {name: Benevity, board: "ashby:benevity", where: Calgary, careers: "https://benevity.com/join-the-team", small: true}
+        - {name: Lightspeed, where: Montréal, careers: "https://www.lightspeedhq.com/careers/", small: true}
+        - {name: Jobber, where: "Edmonton, Toronto", careers: "https://www.getjobber.com/features/quotes/", small: true}
+
+# Ideas for niches anyone can start from (Explore → Niches → New niche). Co-op Coach finds the firms: from your own
+# postings, and with your AI when one is connected.
+starters:
+  - {name: Defense & space, keywords: [defense, aerospace, space, satellite, rocket], category: Hardware}
+  - {name: Game studios, keywords: [game, gameplay, unity, unreal, studio], category: Software}
+  - {name: Health tech, keywords: [health, medical, clinical, biotech, healthcare], category: Software}

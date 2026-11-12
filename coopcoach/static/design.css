@@ -1,0 +1,55 @@
+/* Resume Design editor (design.js). Scoped to .theme-ed / .te-*; only reads the app's colour tokens. */
+.theme-ed { display: grid; grid-template-columns: minmax(340px, 430px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.theme-ed .te-controls { display: grid; gap: 16px; max-height: calc(100vh - 150px); overflow: auto; }
+.theme-ed .te-controls section { display: grid; gap: 6px; }
+.theme-ed .te-top { gap: 6px; flex-wrap: wrap; }
+.theme-ed .te-top .btn:disabled { opacity: .35; cursor: default; }
+.theme-ed .te-mono, .theme-ed .te-meter { font-family: var(--font-mono, "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace); }
+.theme-ed .te-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.theme-ed .te-side { position: sticky; top: 118px; display: grid; gap: 8px; min-width: 0; }
+.theme-ed .te-stage { min-width: 0; display: flex; justify-content: center; }
+.theme-ed .te-paper { background: #fff; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; box-shadow: var(--shadow); }
+.theme-ed .te-paper iframe { border: 0; width: 816px; height: 1056px; transform-origin: 0 0; display: block; background: #fff; }
+.theme-ed .te-under { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.theme-ed .te-meter { font-size: 12px; line-height: 1.5; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  background: var(--surface-2); white-space: pre-wrap; }
+.theme-ed .te-meter .te-meter-bar { font-weight: 600; }
+.theme-ed .te-meter.ok .te-meter-bar { color: var(--good); }
+.theme-ed .te-meter.meh .te-meter-bar { color: var(--warn); }
+.theme-ed .te-meter.bad .te-meter-bar { color: var(--bad); }
+.theme-ed .te-color { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.theme-ed hex-color-picker { width: 150px; height: 150px; flex: none; }
+.theme-ed #te-picker-fallback { width: 64px; height: 64px; border: 1px solid var(--border); border-radius: 8px; background: none; padding: 2px; }
+.theme-ed .te-tint { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: transparent; color: var(--text);
+  border-radius: 999px; padding: 3px 9px 3px 4px; font: inherit; font-size: 12px; cursor: pointer; }
+.theme-ed .te-tint i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; border: 1px solid var(--border); }
+.theme-ed .te-tint.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.theme-ed .te-fonts { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+.theme-ed .te-font { display: flex; align-items: baseline; gap: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 6px 8px; cursor: pointer; text-align: left; min-width: 0; }
+.theme-ed .te-font .te-ag { font-size: 20px; line-height: 1; }
+.theme-ed .te-font .te-fname { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-ed .te-font.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.theme-ed .te-slider { display: grid; grid-template-columns: 92px minmax(0, 1fr) 64px; align-items: center; gap: 8px; font-size: 13px; }
+.theme-ed .te-slider input { width: 100%; accent-color: var(--accent); }
+.theme-ed .te-slider output { font-size: 12px; text-align: right; color: var(--muted); }
+.theme-ed .te-line { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; }
+.theme-ed .te-seg { margin-top: 0; }
+.theme-ed .te-saved { display: inline-flex; padding: 0; overflow: hidden; }
+.theme-ed .te-saved button { border: 0; background: transparent; color: inherit; font: inherit; padding: 4px 4px 4px 10px; cursor: pointer; }
+.theme-ed .te-saved .te-x { padding: 4px 9px 4px 4px; color: var(--muted); }
+.theme-ed .te-saveas input { flex: 1; min-width: 0; }
+.theme-ed .te-note { margin: 0; }
+.studio .te-look { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.studio .te-look i { width: 18px; height: 18px; border-radius: 50%; display: inline-block; border: 1px solid var(--border); }
+@media (max-width: 980px) {
+  .theme-ed { grid-template-columns: 1fr; }
+  .theme-ed .te-controls { max-height: none; }
+  .theme-ed .te-side { position: static; order: -1; }
+}
+.theme-ed .te-ai { display: grid; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid color-mix(in oklch, var(--phosphor) 35%, var(--border)); background: color-mix(in oklch, var(--phosphor) 6%, var(--surface)); }
+.theme-ed .te-ai-form { display: flex; gap: 6px; }
+.theme-ed .te-ai-form input { flex: 1; min-width: 0; }
+.theme-ed .te-ai-note { font-size: 13px; line-height: 1.4; border-left: 2px solid var(--phosphor); padding-left: 10px; }
+.theme-ed .te-any { position: relative; overflow: hidden; background: conic-gradient(#f43f5e, #f59e0b, #22c55e, #06b6d4, #6366f1, #f43f5e); cursor: pointer; }
+.theme-ed .te-any input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }

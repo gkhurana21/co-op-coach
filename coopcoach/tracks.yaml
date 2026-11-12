@@ -1,0 +1,150 @@
+# Tracks: the lenses Jobs is browsed through (Jobs → Matches | your pinned tracks | ＋ Tracks).
+#
+# A role track is a kind of role, whoever hires for it. An employer track is a kind of company, whatever the role.
+# New role tracks the feed keeps posting (Forward Deployed Engineer, GTM Engineer...) are found by track_discovery.py
+# and aren't listed here; `ignore` keeps phrases out of that.
+#
+# Per role track:
+#   categories  postings classified into these role categories count (textutil.CATEGORIES)
+#   titles      words in a title that count too (whole words; regex allowed)
+#   not         words in a title that never count ("AI Sales Intern" isn't ML & AI)
+# Per employer track:
+#   tiers       postings at companies of these kinds count (companies.TIERS)
+#   niche       the firms in this niche (niches.yaml) count, with the niche's own rules
+#   source      startups: the Startups feed's companies (startups.py)
+#   names / not_names  a company name pattern that splits a tier ("Banks & financial firms" vs "Other large employers")
+
+roles:
+  software:
+    name: Software engineering
+    icon: "💻"
+    blurb: Backend, frontend, full stack and general software roles.
+    categories: [Software]
+    titles: [software, developer, swe, sde, backend, back-end, frontend, front-end, "full[- ]?stack", programmer]
+  ml:
+    name: ML & AI
+    icon: "🤖"
+    blurb: Machine learning, AI engineering and applied research.
+    titles: [machine learning, ml, ai engineer\w*, applied ai, artificial intelligence, deep learning, nlp, computer vision,
+             "llms?", "large language models?", research scientist]
+    not: [sales, marketing, recruit\w*, account, business development, operations]
+  data:
+    name: Data
+    icon: "📊"
+    blurb: Data science, data engineering and analytics.
+    titles: [data scien\w*, data engineer\w*, data analy\w*, analytics, business intelligence, bi developer]
+  quant:
+    name: Quant roles
+    icon: "📈"
+    blurb: Quant trading, research and development, at any kind of firm.
+    categories: [Quant]
+    titles: [quant\w*, trader, trading, market making]
+  hardware:
+    name: Hardware
+    icon: "🔧"
+    blurb: Electrical, chip, mechanical and robotics engineering.
+    categories: [Hardware]
+  embedded:
+    name: Embedded & firmware
+    icon: "📟"
+    blurb: Firmware, embedded software, FPGA and real-time systems.
+    titles: [embedded, firmware, fpga, rtos, microcontroller]
+  infra:
+    name: Infra & SRE
+    icon: "🛠"
+    blurb: Infrastructure, platform, cloud, DevOps and site reliability.
+    titles: [devops, sre, site reliability, infrastructure, platform engineer\w*, cloud engineer\w*]
+  security:
+    name: Security
+    icon: "🔐"
+    blurb: Security engineering and cybersecurity.
+    titles: [security, cyber\w*, appsec, penetration]
+    not: [social security, security guard]
+  mobile:
+    name: Mobile
+    icon: "📱"
+    blurb: iOS and Android development.
+    titles: [ios, android, mobile]
+  product:
+    name: Product
+    icon: "🧭"
+    blurb: Product management and technical program management.
+    titles: [product manag\w*, technical program, product owner, \bapm\b]
+  design:
+    name: Design
+    icon: "🎨"
+    blurb: Product, UX and UI design.
+    titles: [designer, ux, ui/ux, product design\w*, user experience]
+  business:
+    name: Business & finance
+    icon: "💼"
+    blurb: Finance, consulting, operations, marketing and other business roles.
+    categories: [Business/Finance]
+
+employers:
+  startups:
+    name: Startups in Canada
+    icon: "🚀"
+    blurb: Startups in Waterloo Region, Toronto and the rest of Canada, fastest-hiring first.
+    source: startups
+  yc:
+    name: YC startups
+    icon: "🟧"
+    blurb: Companies that went through Y Combinator.
+    tiers: [yc]
+  bigtech:
+    name: Big Tech
+    icon: "🏢"
+    blurb: The largest tech companies.
+    tiers: [bigtech]
+  quant-firms:
+    name: Trading firms & funds
+    icon: "💹"
+    niche: quant
+  ai-labs:
+    name: AI labs
+    icon: "🧠"
+    niche: ai
+  ai-startups:
+    name: New AI startups
+    icon: "✨"
+    blurb: "Young companies building with AI: YC and other startups hiring for AI, plus fast-growing applied-AI firms."
+    tiers: [yc, startup]
+    ai: true
+  robotics:
+    name: Robotics & space
+    icon: "🦾"
+    niche: robotics
+  chips:
+    name: Chips & hardware
+    icon: "🔌"
+    niche: hardware
+  fintech:
+    name: Fintech
+    icon: "💳"
+    niche: fintech
+  devtools:
+    name: Dev tools
+    icon: "🧰"
+    niche: devtools
+  # "Banks & Corporate" was 59% of all postings (16k of 27k, 2026-10-30): banks and insurers apart from the rest
+  banks:
+    name: Banks & financial firms
+    icon: "🏦"
+    blurb: Banks, insurers, asset managers and other financial firms.
+    tiers: [finance]
+    names: [bank\w*, banque, financial, insurance, assurance, credit union, capital, securities, "investments?",
+            asset management, wealth, trust, mutual, life, reserve, citi, cibc, rbc, td, bmo, scotiabank, desjardins,
+            manulife, sun life, barclays, ing, hsbc, jpmorgan, goldman sachs, morgan stanley, wells fargo, baird,
+            travelers, marsh, allstate, prudential, metlife, fidelity, vanguard, blackrock, mastercard, visa,
+            american express, interac, intact, aviva, great-west, canada life, "cppib?", omers, otpp, psp investments]
+  corporate:
+    name: Other large employers
+    icon: "🏭"
+    blurb: Large companies outside tech and finance (retail, health, industrial, consulting, media...).
+    tiers: [finance]
+    not_names: banks
+
+# role phrases discovery never offers as a track
+ignore: [summer intern, co op student, student intern, general intern, engineering intern, technical intern,
+         research intern, intern program, internship program]

@@ -34,13 +34,13 @@ POOLERS = ["aws-0-{region}.pooler.supabase.com", "aws-1-{region}.pooler.supabase
 def settings() -> dict:
     path = Path(os.environ.get("COOPCOACH_PG_SETTINGS") or SETTINGS)
     try:
-        return json.loads(path.read_text()) if path.exists() else {}
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     except ValueError:
         return {}
 
 
 def save_settings(d: dict) -> None:
-    SETTINGS.write_text(json.dumps(d, indent=2))
+    SETTINGS.write_text(json.dumps(d, indent=2), encoding="utf-8")
     SETTINGS.chmod(0o600)
 
 
@@ -159,7 +159,8 @@ def move_to_supabase(progress=None) -> dict:
         pg = db.PgBackend(conninfo(s))
         say("Creating the tables…")
         pg.init()
-        tables = [r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+        tables = [r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                  if r[0] in db.COLUMNS]  # only tables Co-op Coach still has (not ones a removed feature left)
         counts = {}
         for t in tables:
             cols_pg = pg.columns(t)

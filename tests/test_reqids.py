@@ -1,7 +1,6 @@
-"""Requisition IDs tie emails and Workday rows to the exact posting, and one shared Workday login covers every
-company's site. Uses a throwaway database and an in-memory keychain (your real Keychain is never touched).
+"""Requisition IDs tie recruiting emails to the exact posting. Uses a throwaway database.
 
-Run: .venv/bin/python -m tests.test_reqids_workday_login
+Run: .venv/bin/python -m tests.test_reqids
 """
 
 import os
@@ -10,34 +9,7 @@ import tempfile
 os.environ["COOPCOACH_DATA"] = tempfile.mkdtemp(prefix="coopcoach-reqtest-")
 os.environ.update(GROQ_API_KEY="", ANTHROPIC_API_KEY="")  # never call a real AI provider from tests
 
-import keyring  # noqa: E402
-from keyring.backend import KeyringBackend  # noqa: E402
-from keyring.errors import PasswordDeleteError  # noqa: E402
-
-
-class MemoryKeyring(KeyringBackend):
-    priority = 1
-
-    def __init__(self):
-        super().__init__()
-        self.d = {}
-
-    def get_password(self, service, user):
-        return self.d.get((service, user))
-
-    def set_password(self, service, user, pw):
-        self.d[(service, user)] = pw
-
-    def delete_password(self, service, user):
-        if (service, user) not in self.d:
-            raise PasswordDeleteError()
-        del self.d[(service, user)]
-
-
-KR = MemoryKeyring()
-keyring.set_keyring(KR)
-
-from coopcoach import db, mail, server, store, vault, workday  # noqa: E402
+from coopcoach import db, mail, server, store  # noqa: E402
 from coopcoach.textutil import same_req  # noqa: E402
 
 RBC = "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"
@@ -108,58 +80,8 @@ def main():
     server.set_application_req({"profile_id": pid, "job_id": r["job_id"], "req_id": " R-77777 "})
     checks["you can type or fix a req ID by hand"] = app_row(pid, r["job_id"])["req_id"] == "R-77777"
 
-    rows = [["Job Title", "Job Req ID", "Status", "Date Submitted"],
-            ["Software Developer Intern", "R-0000181145", "Offer", "10/01/2026"]]
-    parsed = workday.parse_applications(rows, "")
-    checks["Workday's My Applications table: req ID column is captured"] = parsed[0]["req_id"] == "R-0000181145"
-
-    # --- one shared Workday login ---
-    checks["no shared login: nothing is added automatically"] = workday.ensure_default_accounts(pid) == 0
-    added = server.routes_docs.set_default_login({"profile_id": pid, "username": "me@example.com",
-                                                  "password": "Shared-Pass-123!"})["added"]
-    accts = db.rows("SELECT * FROM portal_accounts WHERE profile_id=?", (pid,))
-    sites = {x["site_url"] for x in accts}
-    checks["saving the shared login adds every Workday site you've applied through"] = (
-        added == 2 and sites == {RBC, "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers"}
-        and all(x["uses_default"] for x in accts))
-    checks["each site signs in with the shared password from the Keychain"] = \
-        all(workday.password_for(x) == "Shared-Pass-123!" for x in accts)
-    checks["the database never holds the password"] = "Shared-Pass-123!" not in (open(db.DB_PATH, "rb").read() if db.DB_PATH.exists() else str([db.rows(f"SELECT * FROM {t}") for t in ("portal_accounts", "profiles", "meta")]).encode()).decode(
-        "latin-1") and not any("Shared-Pass" in str(v) for v in db.rows("SELECT * FROM meta"))
-
-    newco = job("ML Intern", "Waterloo/ML-Intern_R-0000200001", company="Royal Bank of Canada")
-    newco["url"] = "https://shopify.wd5.myworkdayjobs.com/Careers/job/Waterloo/ML-Intern_R-0000200001"
-    newco["id"] = store.job_id(newco["url"])
-    store.upsert_jobs([newco], db.now())
-    server.upsert_application({"profile_id": pid, "job_id": newco["id"], "status": "applied"})
-    checks["marking a new Workday job as applied adds that company automatically"] = bool(db.row(
-        "SELECT 1 FROM portal_accounts WHERE profile_id=? AND site_url LIKE 'https://shopify.%' AND uses_default=1",
-        (pid,)))
-
-    td = db.row("SELECT id FROM portal_accounts WHERE site_url LIKE 'https://td.%'")["id"]
-    server.routes_docs.delete_portal(td)
-    workday.ensure_default_accounts(pid)
-    checks["a site you remove isn't re-added from your applications"] = not db.row(
-        "SELECT 1 FROM portal_accounts WHERE site_url LIKE 'https://td.%'")
-    checks["...and removing it keeps the shared password"] = \
-        KR.get_password(vault.SERVICE, vault.workday_default_key(pid)) == "Shared-Pass-123!"
-
-    server.routes_docs.add_portal({"profile_id": pid, "url": "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers",
-                                   "company": "TD", "username": "other@example.com", "password": "TD-only-pass-9!"})
-    tdacct = db.row("SELECT * FROM portal_accounts WHERE site_url LIKE 'https://td.%'")
-    checks["a site with its own password can still be added by hand"] = (
-        tdacct["uses_default"] == 0 and workday.password_for(tdacct) == "TD-only-pass-9!")
-
-    workday.set_default_login(pid, "new@example.com", None)
-    checks["changing the shared email updates every shared site; password kept"] = all(
-        x["username"] == "new@example.com" and workday.password_for(x) == "Shared-Pass-123!"
-        for x in db.rows("SELECT * FROM portal_accounts WHERE uses_default=1"))
-
-    workday.clear_default_login(pid)
-    checks["turning it off removes shared sites and the Keychain entry, keeps the TD login"] = (
-        not db.row("SELECT 1 FROM portal_accounts WHERE uses_default=1")
-        and KR.get_password(vault.SERVICE, vault.workday_default_key(pid)) is None
-        and db.row("SELECT 1 FROM portal_accounts WHERE site_url LIKE 'https://td.%'") is not None)
+    checks["tracking Workday applications does not create monitored accounts"] = not db.rows(
+        "SELECT * FROM portal_accounts WHERE profile_id=?", (pid,))
 
     # older postings get their req IDs filled in once
     with db.tx() as c:

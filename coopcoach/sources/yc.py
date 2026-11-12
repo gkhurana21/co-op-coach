@@ -2,7 +2,8 @@
 
 Every hiring YC startup lists its roles there with structured data: type (Internship / Full-time), location,
 skills, school year, and a visa field ("Will sponsor", "US citizen/visa only", ...). We read one company page per
-request, a few at a time, and the sync only revisits quiet companies about once a day.
+request, a few at a time (in a lane of the sync of their own), and the sync revisits quiet companies about once a
+day.
 """
 
 import html
@@ -12,9 +13,9 @@ import threading
 import time
 
 from ..textutil import extract_terms, is_internship, parse_iso
-from . import client
+from . import pooled
 
-_gate = threading.BoundedSemaphore(4)  # be gentle with ycombinator.com
+_gate = threading.BoundedSemaphore(6)  # be gentle with ycombinator.com: a few pages at a time
 
 
 def _visa_note(visa: str) -> str:
@@ -28,16 +29,17 @@ def _visa_note(visa: str) -> str:
     return ""
 
 
-def fetch(slug: str, name: str, tier: str | None, known: set[str]) -> list[dict]:
-    with _gate:
-        with client(timeout=25) as c:
-            r = c.get(f"https://www.ycombinator.com/companies/{slug}/jobs", headers={"Accept": "text/html"})
-            r.raise_for_status()
-        time.sleep(0.4)
+def fetch(slug: str, name: str, tier: str | None, known: set[str], info: dict | None = None) -> list[dict]:
+    with _gate, pooled() as c:
+        r = c.get(f"https://www.ycombinator.com/companies/{slug}/jobs", headers={"Accept": "text/html"}, timeout=25)
+        r.raise_for_status()
+        time.sleep(0.25)
     m = re.search(r'data-page="([^"]+)"', r.text)
     if not m:
         raise ValueError("YC page format changed (no data-page)")
     jobs = json.loads(html.unescape(m.group(1))).get("props", {}).get("jobPostings") or []
+    if info is not None:
+        info["roles"] = len(jobs)  # every open role, for the startup feed's hiring speed
     out = []
     for j in jobs:
         title = j.get("title") or ""

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Co-op Coach</title><link rel="stylesheet" href="panel.css"></head>
+<body><header><span class="goose" aria-hidden="true">▣</span><div><h1>Co-op Coach</h1><p>Your job hunt, next to any website.</p></div></header>
+<p id="message" role="status" aria-live="polite"></p>
+<form id="pair"><h2>Connect your app</h2><p>In Co-op Coach, go to Settings → AI &amp; extension → Chrome extension and press <b>Get a code</b>. Paste it here.</p>
+<label>App address<input id="base" type="url" value="http://127.0.0.1:8765" required></label>
+<label>Pairing code<input id="code" type="password" autocomplete="off" required></label>
+<button>Connect</button><p class="small">The code works for 5 minutes. Restarted Chrome or the app? Get a new one.</p></form>
+<main id="today" hidden><div class="toolbar"><strong id="person"></strong><button id="refresh">Refresh</button></div>
+<section><h2>Fill an application</h2><p>On a job application page? Press the button: it fills in what it can and attaches your resume. Check everything, then press Submit yourself.</p>
+<button id="fill">Fill this form</button><p id="fill-result" role="status" aria-live="polite"></p>
+<button id="submitted" class="secondary">I submitted it: mark applied</button></section>
+<section><h2>Read my Outlook</h2><p>Only needed if Microsoft sign-in doesn't work for your school. Open Outlook in this tab and press the button: it reads your job emails while you watch. It never sends or deletes anything.</p>
+<button id="inbox">Read my Outlook tab</button><p id="inbox-result" role="status" aria-live="polite"></p></section>
+<section><h2>Coming up</h2><div id="calendar"></div></section>
+<section><h2>Ready to apply</h2><div id="ready"></div></section>
+<section><h2>Matches</h2><div id="matches"></div></section>
+<section><h2>Your Path</h2><div id="path"></div><a id="problem" target="_blank" rel="noreferrer" hidden></a></section>
+<p><a id="open-app" target="_blank" rel="noreferrer">Open full app — all features</a></p>
+<p class="small">Everything else is in the full app.</p>
+<button id="disconnect" class="secondary">Disconnect</button></main><script src="panel.js"></script></body></html>

@@ -68,7 +68,7 @@ def handler(req: httpx.Request) -> httpx.Response:
     return httpx.Response(404, text="nothing here")
 
 
-def fake_client(timeout: float = 30) -> httpx.Client:
+def fake_client(timeout: float = 30, public_only: bool = False) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
 
 

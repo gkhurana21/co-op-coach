@@ -10,23 +10,28 @@ import os
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 TMP = tempfile.mkdtemp(prefix="coopcoach-codextest-")
 BIN = Path(TMP) / "bin" / "codex"
 BIN.parent.mkdir()
-BIN.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{Path(__file__).with_name("fake_codex.py")}" "$@"\n')
-BIN.chmod(BIN.stat().st_mode | stat.S_IEXEC)
+if os.name == "nt":  # Windows runs a .cmd wrapper; elsewhere a shell script
+    BIN = BIN.with_suffix(".cmd")
+    BIN.write_text(f'@"{sys.executable}" "{Path(__file__).with_name("fake_codex.py")}" %*\r\n', encoding="utf-8")
+else:
+    BIN.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{Path(__file__).with_name("fake_codex.py")}" "$@"\n', encoding="utf-8")
+    BIN.chmod(BIN.stat().st_mode | stat.S_IEXEC)
 LOG = Path(TMP) / "fake.log"
 os.environ.update(COOPCOACH_DATA=TMP, COOPCOACH_CODEX_BIN=str(BIN), COOPCOACH_CLAUDE_BIN="/nonexistent",
                   FAKE_CODEX_LOG=str(LOG), GROQ_API_KEY="", ANTHROPIC_API_KEY="", OPENAI_API_KEY="sk-should-not-leak",
                   PYTHONPATH=str(Path(__file__).resolve().parent.parent))
 
-from coopcoach import agent, ai, autopilot, claude_setup, codex_cli, db, store  # noqa: E402
+from coopcoach import agent, ai, autopilot, claude_code, claude_setup, codex_cli, db, store  # noqa: E402
 
 
 def calls() -> list[dict]:
-    return [json.loads(x) for x in LOG.read_text().splitlines()] if LOG.exists() else []
+    return [json.loads(x) for x in LOG.read_text(encoding="utf-8").splitlines()] if LOG.exists() else []
 
 
 def seed():
@@ -48,6 +53,62 @@ def seed():
     return pid
 
 
+def wait_for(cond, seconds: float = 8) -> bool:
+    end = time.time() + seconds
+    while time.time() < end:
+        if cond():
+            return True
+        time.sleep(0.05)
+    return bool(cond())
+
+
+def sign_in_checks(pid: int, checks: dict) -> None:
+    """Same as Claude Code: signing in shows up within seconds, /api/state never waits on `codex`."""
+    from types import SimpleNamespace
+
+    from coopcoach import routes_auto, server
+    os.environ["FAKE_CODEX_SIGNED_OUT"] = "1"
+    codex_cli.status(refresh=True)
+    os.environ.pop("FAKE_CODEX_SIGNED_OUT")
+    cached = codex_cli.status()["logged_in"]
+    codex_cli._status["t"] -= claude_code.FRESH_SIGNED_OUT + 0.5
+    checks["'not signed in' is only reused for a few seconds"] = not cached and codex_cli.status()["logged_in"]
+
+    os.environ["FAKE_CODEX_SIGNED_OUT"] = "1"
+    codex_cli.status(refresh=True)
+    claude_code.SIGNIN_POLL = 0.2
+    opened = []
+    real_osascript, claude_code._osascript = claude_code._osascript, opened.append  # never opens a real Terminal
+    try:
+        if sys.platform == "darwin":
+            codex_cli.sign_in_in_terminal()
+        else:
+            claude_code.watch_sign_in("codex", codex_cli.status)
+        time.sleep(0.5)
+        still_out = not codex_cli.status_cached()["logged_in"]
+        os.environ.pop("FAKE_CODEX_SIGNED_OUT")
+        t = time.time()
+        flipped = wait_for(lambda: codex_cli.status_cached()["logged_in"])
+        checks["after Sign in, the app sees it finish within ~2 s, without a reload"] = \
+            still_out and flipped and time.time() - t < 3 and (opened or sys.platform != "darwin")
+        checks["...and then stops checking"] = wait_for(lambda: not claude_code._watch_until.get("codex"), 3)
+    finally:
+        claude_code._osascript = real_osascript
+
+    os.environ["FAKE_CODEX_SLOW"] = "3"
+    codex_cli._status["t"] = 0
+    t = time.time()
+    st = server.get_state(SimpleNamespace(cookies={}))
+    checks["/api/state never waits on the `codex` command"] = time.time() - t < 1.5 and st["codex"]["logged_in"] \
+        and st["ai_provider"] == "codex"
+    wait_for(lambda: not codex_cli._checking.locked(), 6)
+    os.environ.pop("FAKE_CODEX_SLOW")
+    before = len([c for c in calls() if "cmd" in c])
+    r = routes_auto.codex_status(pid, refresh=True)
+    checks["Settings' status check skips the slow plugin listing"] = r["logged_in"] and "plugin_installed" not in r \
+        and len([c for c in calls() if "cmd" in c]) == before
+
+
 def main():
     pid = seed()
     checks = {}
@@ -55,6 +116,7 @@ def main():
     checks["finds ChatGPT's Codex and that it's signed in"] = s["installed"] and s["logged_in"] and s["model"] == "gpt-6-astra"
     db.meta_set("ai_engine", "codex")
     checks["choosing it makes ChatGPT the engine"] = ai.provider() == "codex" and ai.label() == "your ChatGPT"
+    sign_in_checks(pid, checks)
 
     out = ai._call_json("Be terse.", [{"type": "text", "text": "Alex Chen (alex@example.com) wants a letter"}],
                         ai._obj({"letter": ai._STR}), effort="medium")

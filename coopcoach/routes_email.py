@@ -1,5 +1,6 @@
 """Inbox routes: connecting Gmail / Outlook / any IMAP inbox, the found recruiting emails and corrections."""
 
+import re
 import threading
 import time
 
@@ -158,6 +159,26 @@ def outlook_start(body: dict = Body(...)):
             "message": flow.get("message", "")}
 
 
+@router.post("/api/email/outlook-web/start")
+def outlook_web_start(body: dict = Body(...)):
+    """Open Outlook on the web in Co-op Coach's own window; the student signs in there (no app registration and no
+    IT approval needed). Poll /api/email/outlook-web/{flow_id}."""
+    from . import outlook_web
+    pid, address = body.get("profile_id"), (body.get("address") or "").strip().lower()
+    if not pid or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", address):
+        raise HTTPException(400, "Type the Outlook address you want to connect first")
+    return {"flow_id": outlook_web.connect(pid, address)}
+
+
+@router.get("/api/email/outlook-web/{flow_id}")
+def outlook_web_status(flow_id: str):
+    from . import outlook_web
+    f = outlook_web.flow(flow_id)
+    if not f:
+        raise HTTPException(404)
+    return f
+
+
 @router.get("/api/email/outlook/{flow_id}")
 def outlook_status(flow_id: str):
     f = _ms_flows.get(flow_id)
@@ -173,12 +194,26 @@ def delete_email_account(aid: int):
         vault.delete(vault.email_key(a["profile_id"], a["address"]))
     with db.tx() as c:
         c.execute("DELETE FROM email_accounts WHERE id=?", (aid,))
+        c.execute("DELETE FROM meta WHERE key=?", (f"graph_delta:{aid}",))  # Microsoft's place in that inbox
     return {"ok": True}
 
 
 @router.post("/api/email/sync")
 def email_sync(body: dict = Body(...)):
     return {"started": _start_email_sync(body.get("profile_id"))}
+
+
+@router.get("/api/email/resort")
+def email_resort_preview(profile_id: int):
+    """What today's rules would change in the emails already tracked; nothing changes until it's confirmed."""
+    return mail.resort(profile_id)
+
+
+@router.post("/api/email/resort")
+def email_resort(body: dict = Body(...)):
+    if body.get("profile_id") in _email_sync_running:
+        raise HTTPException(409, "Your inbox is being checked right now. Try again when it finishes.")
+    return mail.resort(body["profile_id"], apply=True)
 
 
 @router.get("/api/email/events")
@@ -195,6 +230,10 @@ def fix_email_event(eid: str, body: dict = Body(...)):
     ev = db.row("SELECT * FROM email_events WHERE id=?", (eid,))
     if not ev:
         raise HTTPException(404)
+    if body.get("ignored"):  # not about a job: what it put on the calendar goes too
+        from . import meetings
+        meetings.forget(ev["profile_id"], ev["message_id"])
+        meetings.forget(ev["profile_id"], eid)  # (a pasted email's items carry its own id)
     with db.tx() as c:
         if "ignored" in body:
             c.execute("UPDATE email_events SET ignored=? WHERE id=?", (1 if body["ignored"] else 0, eid))

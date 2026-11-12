@@ -6,7 +6,9 @@ server opens your profile with a connection token kept in the Keychain; the data
 After connecting, any Claude Code session has /coop-coach:autopilot, /coop-coach:apply, /coop-coach:hunt and more.
 """
 
+import hashlib
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -14,9 +16,20 @@ import sys
 from . import auth, claude_code, config, vault
 from .mcp_server import CONNECT_KEY
 
+log = logging.getLogger(__name__)
 MARKETPLACE = "coop-coach-local"
 PLUGIN = "coop-coach"
 TEMPLATE = config.ROOT / "claude-plugin"
+MATCHER = "|".join(f"mcp__{srv}__{tool}" for srv in ("claude-in-chrome", "Claude_Browser")
+                   for tool in ("computer", "browser_batch"))  # every browser the guard can read the action of
+
+
+def template_hash() -> str:
+    """Changes whenever the plugin's files do."""
+    h = hashlib.sha256()
+    for f in sorted(p for p in TEMPLATE.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+        h.update(str(f.relative_to(TEMPLATE)).encode() + b"\0" + f.read_bytes())
+    return h.hexdigest()[:10]
 
 
 def plugin_dir():
@@ -30,22 +43,27 @@ def build() -> str:
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(TEMPLATE, dest)
+    stamp = template_hash()
+    manifest = json.loads((dest / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    manifest["version"] = f"{manifest['version']}-{stamp}"  # `claude plugin update` only moves on a new version
+    (dest / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (root / ".template-hash").write_text(stamp, encoding="utf-8")
     py = sys.executable
     env = {"COOPCOACH_DATA": str(config.DATA_DIR), "PYTHONPATH": str(config.ROOT), "COOPCOACH_SOURCE": "claude_code"}
     (dest / ".mcp.json").write_text(json.dumps(
         {"mcpServers": {PLUGIN: {"type": "stdio", "command": py, "args": ["-m", "coopcoach", "mcp"], "env": env}}},
-        indent=2))
+        indent=2), encoding="utf-8")
     (dest / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {"PreToolUse": [{
-        "matcher": "mcp__claude-in-chrome__computer|mcp__claude-in-chrome__browser_batch",
+        "matcher": MATCHER,
         "hooks": [{"type": "command", "command": json.dumps(py) + ' "${CLAUDE_PLUGIN_ROOT}/hooks/no_submit.py"'}],
-    }]}}, indent=2))
+    }]}}, indent=2), encoding="utf-8")
     (root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
     (root / ".claude-plugin" / "marketplace.json").write_text(json.dumps({
         "name": MARKETPLACE, "owner": {"name": "Co-op Coach"},
         "description": "Co-op Coach's plugin, built for this computer by the app.",
         "plugins": [{"name": PLUGIN, "source": f"./{PLUGIN}",
-                     "description": "Co-op Coach inside Claude Code: autopilot, apply (you submit), hunt, follow-ups, "
-                                    "interview prep, events, resume."}]}, indent=2))
+                     "description": "Your internship hunt inside Claude Code: today, apply (you submit), hunt, tracks, "
+                                    "NeetCode 150, follow-ups, interviews, hackathons, events, resume."}]}, indent=2), encoding="utf-8")
     return str(root)
 
 
@@ -67,6 +85,24 @@ def installed() -> bool:
     except ValueError:
         return f"{PLUGIN}@{MARKETPLACE}" in out
     return any(PLUGIN in json.dumps(i) and MARKETPLACE in json.dumps(i) for i in items)
+
+
+def refresh_if_stale() -> dict:
+    """The app updated: bring an installed plugin along, or it keeps offering skills and tools that are gone. Only for
+    a plugin someone already connected."""
+    if not (plugin_dir() / PLUGIN).exists():
+        return {"refreshed": False, "why": "not connected"}
+    marker = plugin_dir() / ".template-hash"
+    if marker.exists() and marker.read_text(encoding="utf-8").strip() == template_hash():
+        return {"refreshed": False, "why": "up to date"}
+    build()
+    if codex_plugin_dir().exists():
+        build_codex()
+    ok1, out1 = _claude("plugin", "marketplace", "update", MARKETPLACE)
+    ok2, out2 = _claude("plugin", "update", f"{PLUGIN}@{MARKETPLACE}")
+    if not (ok1 and ok2):
+        log.info("refreshing the Claude Code plugin: %s %s", out1[-160:], out2[-160:])
+    return {"refreshed": True, "installed": ok2}
 
 
 def connect(pid: int) -> dict:
@@ -131,18 +167,18 @@ def build_codex() -> str:
     py = sys.executable
     env = {"COOPCOACH_DATA": str(config.DATA_DIR), "PYTHONPATH": str(config.ROOT), "COOPCOACH_SOURCE": "codex"}
     (dest / ".mcp.json").write_text(json.dumps(
-        {"mcpServers": {PLUGIN: {"command": py, "args": ["-m", "coopcoach", "mcp"], "env": env}}}, indent=2))
-    manifest = json.loads((TEMPLATE / ".claude-plugin" / "plugin.json").read_text())
+        {"mcpServers": {PLUGIN: {"command": py, "args": ["-m", "coopcoach", "mcp"], "env": env}}}, indent=2), encoding="utf-8")
+    manifest = json.loads((TEMPLATE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     manifest.update({"skills": "./skills/", "mcpServers": "./.mcp.json", "interface": {
         "displayName": "Co-op Coach", "shortDescription": "Your internship hunt: autopilot, apply (you submit), follow-ups",
         "category": "Productivity", "defaultPrompt": ["Run my Co-op Coach autopilot"]}})
-    (dest / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2))
+    (dest / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (root / ".agents" / "plugins").mkdir(parents=True, exist_ok=True)
     (root / ".agents" / "plugins" / "marketplace.json").write_text(json.dumps({
         "name": CODEX_MARKETPLACE, "interface": {"displayName": "Co-op Coach (this computer)"},
         "plugins": [{"name": PLUGIN, "source": {"source": "local", "path": f"./plugins/{PLUGIN}"},
                      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}]},
-        indent=2))
+        indent=2), encoding="utf-8")
     return str(root)
 
 

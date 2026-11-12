@@ -5,6 +5,7 @@ Run: .venv/bin/python -m tests.test_agent_mcp
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -15,7 +16,7 @@ TMP = tempfile.mkdtemp(prefix="coopcoach-agenttest-")
 os.environ.update(COOPCOACH_DATA=TMP, GROQ_API_KEY="test-key", GROQ_BASE_URL="http://127.0.0.1:8798/openai/v1",
                   ANTHROPIC_API_KEY="")
 
-from coopcoach import agent, apply, auth, db, store  # noqa: E402
+from coopcoach import agent, apply, auth, autopilot, db, store  # noqa: E402
 
 SENT: list[dict] = []
 
@@ -80,7 +81,8 @@ async def mcp_session(profile: str, env: dict):
             tools = await s.list_tools()
             res = await s.call_tool("search_jobs", {"location": "Toronto"})
             star = await s.call_tool("star", {"company": "Shopify"})
-            return [t.name for t in tools.tools], res, star
+            ap = await s.call_tool("change_autopilot", {"per_day": 5})
+            return tools.tools, res, star, ap
 
 
 def main():
@@ -114,6 +116,21 @@ def main():
     checks["...and undo restores them"] = store.get_profile(pid)["prefs"]["locations"] == ["Toronto", "Canada"]
     checks["unknown tools and bad args come back as errors, not crashes"] = (
         "error" in agent.call(pid, "delete_everything", {}) and "error" in agent.call(pid, "track", {"job_id": "nope", "status": "applied"}))
+    checks["a missing argument is reported as bad arguments"] = agent.call(pid, "track", {"job_id": shop})["error"] \
+        .startswith("bad arguments")
+
+    def buggy(pid, text=""):
+        return None + len(text)  # a TypeError inside the tool: a bug, not the model's arguments
+
+    warned = []
+    handler = type("H", (logging.Handler,), {"emit": lambda self, r: warned.append(r.getMessage())})()
+    agent.log.addHandler(handler)
+    agent.TOOLS["buggy_tool"] = (buggy, "test", agent._s({"text": agent._STR}))
+    out = agent.call(pid, "buggy_tool", {"text": "hi"})
+    del agent.TOOLS["buggy_tool"]
+    agent.log.removeHandler(handler)
+    checks["a TypeError inside a tool isn't blamed on the arguments, and it's logged"] = \
+        not out["error"].startswith("bad arguments") and any("buggy_tool" in w for w in warned)
 
     os.environ["GROQ_API_KEY"] = ""  # the kit's free-text drafts are AI; check the deterministic part
     kit = apply.build_kit(pid, shop)
@@ -141,8 +158,14 @@ def main():
         "Alex Chen" not in json.dumps(SENT) and "alex@example.com" not in json.dumps(SENT))
     srv.shutdown()
 
-    names, res, star = asyncio.run(mcp_session("Tester", {"GROQ_API_KEY": ""}))
+    tools, res, star, ap = asyncio.run(mcp_session("Tester", {"GROQ_API_KEY": ""}))
+    names = [t.name for t in tools]
     checks["MCP: Claude sees every tool"] = len(names) == len(agent.TOOLS) and "application_kit" in names
+    checks["MCP: every tool takes the same arguments as in the chat, descriptions included"] = all(
+        t.input_schema.get("properties") == agent.TOOLS[t.name][2]["properties"]
+        and sorted(t.input_schema.get("required") or []) == sorted(agent.TOOLS[t.name][2]["required"]) for t in tools)
+    checks["MCP: change_autopilot really changes Autopilot (per_day 5)"] = not ap.is_error and \
+        autopilot.settings(pid)["per_day"] == 5
     text = json.dumps([c.model_dump() for c in res.content])
     checks["MCP: search_jobs works over the protocol"] = "Shopify" in text and not res.is_error
     checks["MCP: actions write to the same tracker"] = bool(db.row(

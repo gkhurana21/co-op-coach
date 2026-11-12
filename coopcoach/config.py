@@ -19,7 +19,7 @@ def _load_dotenv() -> None:
     env = ROOT / ".env"
     if not env.exists():
         return
-    for line in env.read_text().splitlines():
+    for line in env.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -32,10 +32,15 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 
+def read_yaml(text: str):
+    """YAML, by the C parser where it's installed (the seed lists take seconds in pure Python)."""
+    return yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
 @lru_cache(maxsize=1)
 def settings() -> dict:
     path = ROOT / "config.yaml"
-    cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
+    cfg = read_yaml(path.read_text(encoding="utf-8")) if path.exists() else {}
     return cfg or {}
 
 
@@ -50,7 +55,7 @@ def get(path: str, default=None):
 
 
 def seed_companies() -> dict:
-    return yaml.safe_load((PKG / "seed_companies.yaml").read_text()) or {}
+    return read_yaml((PKG / "seed_companies.yaml").read_text(encoding="utf-8")) or {}
 
 
 def seed_version() -> str:

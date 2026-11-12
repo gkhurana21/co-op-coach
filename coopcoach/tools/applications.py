@@ -7,7 +7,8 @@ import re
 import threading
 import time
 
-from .. import ai, db, store
+from .. import ai, contacts, db, store
+from ..textutil import company_key, when_text
 from .common import (
     STATUSES,
     _app_job,
@@ -125,6 +126,14 @@ def prep_interview(pid: int, job_id: str) -> dict:
             "_undo": {"tool": "discard_draft", "args": {"doc_id": doc_id}}}
 
 
+def _contacts_from_history(pid: int) -> None:
+    """Recruiters from emails read before that tab existed, before this email adds its own (so none counts twice)."""
+    try:
+        contacts.backfill(pid)
+    except Exception as e:
+        log.warning("couldn't add recruiters from earlier emails: %s", e)
+
+
 def log_email(pid: int, text: str, company: str = "", role: str = "", status: str = "", when: str = "",
               deadline: str = "") -> dict:
     """A recruiting email the student pasted: put it on the right application (adding one if they never tracked it),
@@ -134,7 +143,12 @@ def log_email(pid: int, text: str, company: str = "", role: str = "", status: st
     text = (text or "").strip()[:12000]
     if len(text) < 40:
         return {"error": "paste the whole email (at least a few lines)"}
+    _contacts_from_history(pid)
     r = mail.read_pasted(text)
+    from .. import meetings
+    kind = meetings.kind_of(r["subject"], text, r.get("status"))
+    if kind in meetings.NETWORKING and not status:  # a coffee chat or an info session: the calendar, not the tracker
+        return _log_meeting(pid, text, r, kind)
     company = (company or r["company"] or "").strip()
     role = (role or r["role"] or "").strip()
     status = {"interview": "interviewing", "assessment": "oa", "online assessment": "oa", "rejection": "rejected",
@@ -173,6 +187,22 @@ def log_email(pid: int, text: str, company: str = "", role: str = "", status: st
                   (eid, pid, None, f"pasted:{eid}", now, r["from_name"] or company, r["from_addr"], r["subject"],
                    re.sub(r"\s+", " ", text)[:400], links.get("book") or links.get("assessment") or None, status,
                    company, role, job_id, "pasted", int(changed), now, ", ".join(r["req_ids"][:3]) or None))
+    try:  # its interview time, assessment deadline or booking link, on the calendar
+        items = meetings.extract(r["subject"], text, "", now, status)
+        if at and at > now - 3600 and not any(i.get("start_ts") for i in items) and status in ("interviewing", "oa", "applied"):
+            items = [{**i, "start_ts": at, "end_ts": at + 3600, "status": "confirmed"} for i in items if i["kind"] != "oa"] \
+                or [{"kind": "interview", "start_ts": at, "end_ts": at + 3600, "status": "confirmed"}]
+        if items:
+            meetings.save(pid, items, job_id, company, f"{r['from_name']} <{r['from_addr']}>" if r["from_addr"] else "",
+                          eid, r["subject"], "", "pasted")
+    except Exception as e:
+        log.warning("couldn't put a pasted email on the calendar: %s", e)
+    if not dup:  # who wrote it goes to Recruiters (once per email)
+        try:
+            contacts.record(pid, from_name=r["from_name"], from_addr=r["from_addr"], company=company, body=text,
+                            subject=r["subject"], status=status, job_id=job_id, when=now, source="pasted")
+        except Exception as e:
+            log.warning("couldn't save the sender of a pasted email as a contact: %s", e)
     store.refresh_scores()
     a = _app_row(pid, job_id) or {}
     j = _find_job(pid, job_id)
@@ -189,7 +219,7 @@ def log_email(pid: int, text: str, company: str = "", role: str = "", status: st
             nxt.append("Book a time with the link, then tell me the day and time: I'll put it on your calendar "
                        "with a reminder.")
         elif a.get("interview_at"):
-            nxt.append(f"Interview {time.strftime('%a %b %d, %-I:%M %p', time.localtime(a['interview_at']))} is on your "
+            nxt.append(f"Interview {when_text(a['interview_at'])} is on your "
                        "calendar (reminder an hour before).")
         nxt.append("A thank-you note gets drafted for after the interview (never sent).")
     elif status == "oa":
@@ -259,8 +289,37 @@ def prep_pending(pid: int) -> int:
     return n
 
 
+def _log_meeting(pid: int, text: str, r: dict, kind: str) -> dict:
+    """A pasted coffee chat, info session or career fair: it goes on the calendar (and its sender on People), and no
+    application is made for it."""
+    from .. import mail, meetings
+    eid = mail._event_id(pid, "pasted:" + hashlib.sha1(text.encode()).hexdigest()[:16])
+    items = meetings.extract(r["subject"], text, "", db.now())
+    who = f"{r['from_name']} <{r['from_addr']}>" if r["from_addr"] else (r["from_name"] or "")
+    company = mail._sender_company({"body": text, "from_addr": r["from_addr"]}) or r.get("company") or ""
+    ids = meetings.save(pid, items, None, company, who, eid, r["subject"], "", "pasted") if items else []
+    if r["from_addr"] or r["from_name"]:
+        try:
+            contacts.record(pid, from_name=r["from_name"], from_addr=r["from_addr"], company=company, body=text,
+                            subject=r["subject"], status="", job_id=None, when=db.now(), source="pasted")
+        except Exception as e:
+            log.warning("couldn't save the sender of a pasted email as a contact: %s", e)
+    it = items[0] if items else {}
+    label = meetings.KINDS[kind]
+    when = when_text(it["start_ts"]) if it.get("start_ts") else ""
+    nxt = ([f"{label} {when} is on your calendar (reminder {meetings.ALARM[kind]} minutes before)."] if when else
+           ["Book a time with the link; tell me the day and time and I'll put it on your calendar."] if it.get("book_url")
+           else ["No time in it yet: tell me when, and I'll put it on your calendar."])
+    return {"ok": True, "meeting": label, "with": who or company, "company": company, "start_ts": it.get("start_ts"),
+            "book": it.get("book_url") or "", "join": it.get("join_url") or "", "next_steps": nxt, "calendar_items": ids,
+            "_undo": {"tool": "forget_email", "args": {"event_id": eid}}}
+
+
 def forget_email(pid: int, event_id: str, job_id: str = "", since: int = 0, restore=None) -> dict:
-    """Undo a pasted email: remove it from the inbox list and put the application back the way it was."""
+    """Undo a pasted email: remove it from the inbox list, take off the calendar what it put there, and put the
+    application back the way it was."""
+    from .. import meetings
+    meetings.forget(pid, event_id)
     with db.tx() as c:
         c.execute("DELETE FROM email_events WHERE profile_id=? AND id=?", (pid, event_id))
         if job_id and restore == "remove":
@@ -292,7 +351,7 @@ def set_dates(pid: int, job_id: str, interview_at: str | None = None, oa_due_at:
     with db.tx() as c:
         c.execute("UPDATE applications SET " + ", ".join(f"{k}=?" for k in vals) + " WHERE profile_id=? AND job_id=?",
                   (*vals.values(), pid, a["job_id"]))
-    when = {k: time.strftime("%a %b %d, %-I:%M %p", time.localtime(v)) for k, v in vals.items() if v}
+    when = {k: when_text(v) for k, v in vals.items() if v}
     return {"ok": True, "job_id": a["job_id"], "company": a.get("company") or (j or {}).get("company"), "set": when,
             "_undo": {"tool": "set_dates", "args": {"job_id": a["job_id"], "clear": True, **{
                 k: a.get(k) or "" for k in vals}}}}
@@ -319,7 +378,7 @@ def add_application(pid: int, company: str, title: str = "", url: str = "", stat
     if not (company or "").strip():
         return {"error": "company is required"}
     from .. import mail
-    from ..textutil import company_key
+
     hit = None  # a posting Co-op Coach lists comes first, so the application keeps its details
     ck = company_key(company)
     if title:
@@ -413,3 +472,27 @@ def discard_draft(pid: int, doc_id: int) -> dict:
         n = c.execute("DELETE FROM documents WHERE profile_id=? AND id=? AND kind IN ('followup', 'thankyou', 'prep',"
                       " 'research', 'message')", (pid, doc_id)).rowcount
     return {"ok": bool(n), "removed": n}
+
+
+def recruiters(pid: int, query: str = "", company: str = "", role: str = "") -> dict:
+    """People they know: recruiters who wrote about applications (inbox and pasted emails), their LinkedIn
+    connections and people they added: name, title, company, email, phone, LinkedIn, last contact. With a company,
+    also a link to LinkedIn's own search for alumni of their school there (they open it, signed in as themselves)."""
+    people = contacts.search(pid, query, company, limit=40 if role else 12)
+    if role:  # founder | recruiter | leader | engineer | product
+        people = [p for p in people if contacts.role_of(p.get("title") or "", p.get("kind") or "person") == role][:12]
+    sig = contacts.signals(pid, {company_key(p["company"]): p["company"] for p in people if p.get("company")})
+    for p in people:
+        g = sig.get(company_key(p.get("company") or ""))
+        if g:
+            f = g["funding"]
+            p["company_facts"] = {"yc_batch": g["yc"] or None, "team_size": g["team"], "internships_open": g["open"],
+                                  "raised_usd": f["total_usd"] if f and f["found"] else None,
+                                  "last_round": (f or {}).get("last_round")}
+        p["last_contact"] = when_text(p.pop("last_seen"), with_time=False) if p.get("last_seen") else None
+    out = {"count": len(people), "people": people,
+           "note": "" if people else "No one yet: connect an inbox (Applications), paste a recruiter's email, or "
+                                     "import LinkedIn connections (People tab)."}
+    if company:
+        out["find_alumni"] = contacts.alumni_search(pid, company)
+    return out

@@ -54,7 +54,10 @@ NOT_JOB = _P(r"job alert|jobs? (?:you may|you might|for you|matching)|new jobs|r
              r"admission|graduate school|course registration|osap")
 ALERT_SENDERS = _P(r"jobalerts-noreply@linkedin|jobs-listings@linkedin|alert@indeed|noreply@glassdoor|"
                    r"invitations@linkedin|messages-noreply@linkedin|notifications-noreply@linkedin|"
-                   r"newsletters?@|digest@|marketing@")
+                   r"newsletters?@|digest@|marketing@|editors-noreply@linkedin|news(?:letter)?-?(?:no-?reply)?@|"
+                   r"@(?:\w+\.)?substack\.com|noreply@medium\.com|promotions?@|offers@|deals@")
+# who writes news, not about your application: "LinkedIn News", "The Daily Digest", "Morning Brew Weekly"
+NEWS_NAME = _P(r"\b(?:news|newsletter|digest|daily|weekly|bulletin|magazine|editors?|insights)\s*$")
 
 ATS_DOMAINS = ("greenhouse.io", "greenhouse-mail.io", "lever.co", "ashbyhq.com", "myworkday.com", "workday.com",
                "myworkdayjobs.com", "icims.com", "smartrecruiters.com", "taleo.net", "successfactors.com",
@@ -64,6 +67,10 @@ ATS_DOMAINS = ("greenhouse.io", "greenhouse-mail.io", "lever.co", "ashbyhq.com",
                "phenom.com", "paradox.ai", "simplify.jobs", "handshake.com", "joinhandshake.com", "breezy.hr",
                "teamtailor.com", "pinpointhq.com", "dover.com", "wellfound.com", "ycombinator.com",
                "workatastartup.com", "calendly.com", "goodtime.io", "modernloop.io", "zoom.us")
+# booking and meeting tools that send on a company's behalf: their domain says nothing about the company
+SCHEDULER_DOMAINS = ("calendly.com", "goodtime.io", "zoom.us",
+                     "teams.microsoft.com", "doodle.com", "youcanbook.me", "cal.com", "modernhire.com", "brighthire.ai",
+                     "metaview.ai", "sendgrid.net", "mailchimp.com", "hubspot.com")
 GENERIC_DOMAINS = ("gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "live.com", "me.com",
                    "proton.me", "protonmail.com")
 _NAME_NOISE = _P(r"\b(university|campus|early careers?|emerging talent|talent acquisition|talent team|talent|"
@@ -76,9 +83,17 @@ _GENERIC_EDGE = {"online", "technical", "coding", "video", "final", "phone", "vi
                  "offer", "invitation", "regarding", "about", "from", "with", "at", "to", "for", "on", "in", "of",
                  "a", "an", "and", "is", "has", "this", "my"}
 _BAD_COMPANY = _P(r"\b(thank|thanks|you|your|next steps?|update|status|invitation|invite|regarding|reminder|"
-                  r"confirm\w*|received|we|our|congratulations|unfortunately|hello|hi|dear)\b")
-_ROLE_WORD = _P(r"\b(intern|internship|co-?op|engineer\w*|developer|analyst|scientist|designer|manager|associate|"
-                r"researcher|student|specialist|consultant|programmer|technologist|architect|trader|quant\w*)\b")
+                  r"confirm\w*|received|reviewed|submitted|applications?|programs?|we|we'?(?:ve|re|ll)|our|"
+                  r"congratulations|unfortunately|"
+                  r"hello|hi|dear)\b|[’']s\b")
+_ROLE_WORD = _P(r"\b(interns?|internships?|co-?ops?|engineer\w*|developers?|analysts?|scientists?|designers?|"
+                r"managers?|associates?|researchers?|students?|specialists?|consultants?|programmers?|technologists?|"
+                r"architects?|traders?|quant\w*|experts?|testers?|writers?|tutors?|annotators?)\b")
+
+
+_TEAM_TAIL = {"early", "talent", "careers", "career", "recruiting", "recruitment", "recruiter", "recruiters", "university",
+              "campus", "internships", "internship", "program", "programs", "team", "hr", "jobs", "hiring", "people",
+              "acquisition", "students", "student", "emerging"}
 
 
 def _valid_company(c: str) -> str:
@@ -106,6 +121,11 @@ def _clean_company(s: str) -> str:
 
 
 _SUBJ_COMPANY = [
+    # "Application Submitted - Software Developers (Must own MacBook) on Mercor"
+    _P(r"^(?:re: |fwd?: )?application (?:submitted|received|confirmation)\s*[-–:|]\s*(?P<r>.{3,120}?) (?:on|at|with) "
+       r"(?P<c>[A-Z0-9][\w&.'’ -]{1,40}?)\s*$"),
+    # "Shopify: Internship Application"
+    _P(r"^(?:re: |fwd?: )?(?P<c>[A-Z0-9][\w&.'’ ]{1,40}?):\s*(?:\w+ )?(?:internship |co-?op )?application\b"),
     _P(r"(?:thank(?:s| you) for (?:applying|your application|your interest)|your application) "
        r"(?:to|at|with|in) (?:the )?(?P<c>[A-Z0-9][\w&.'’ -]{1,48}?)(?:[!.,]|$| [-–|]| for | team\b)"),
     _P(r"application (?:for|to) (?P<r>.+?) (?:at|with) (?P<c>[A-Z0-9][\w&.'’ -]{1,48}?)(?:[!.,]|$| [-–|])"),
@@ -127,18 +147,34 @@ _ROLE = [
 
 def _domain_company(addr: str) -> str:
     dom = (addr or "").rsplit("@", 1)[-1].lower()
-    if not dom or any(dom == d or dom.endswith("." + d) for d in ATS_DOMAINS + GENERIC_DOMAINS):
+    if not dom or any(dom == d or dom.endswith("." + d) for d in ATS_DOMAINS + GENERIC_DOMAINS + SCHEDULER_DOMAINS):
         return ""
+    if dom.rsplit(".", 1)[-1] in ("example", "test", "invalid", "localhost"):  # reserved names: the label before is it
+        dom = dom.rsplit(".", 1)[0] + ".com"
     parts = [p for p in dom.split(".") if p not in ("mail", "email", "careers", "jobs", "recruiting", "talent",
                                                     "hr", "notifications", "noreply", "us", "eu", "ca", "co", "com",
                                                     "org", "net", "io", "ai", "uk", "app")]
     return parts[-1] if parts else ""
 
 
+def _named_like_domain(addr: str, text: str) -> str:
+    """The company as the email writes it, found from its address: northwindrobotics.com -> "Northwind Robotics"."""
+    core = re.sub(r"[^a-z0-9]", "", _domain_company(addr).lower())
+    if len(core) < 3:
+        return ""
+    for m in re.finditer(r"\b[A-Z][\w&'-]*(?:\s+[A-Z][\w&'-]*){0,3}", text or ""):
+        words = m.group(0).split()
+        for n in range(len(words), 0, -1):
+            for i in range(len(words) - n + 1):
+                if re.sub(r"[^a-z0-9]", "", "".join(words[i:i + n]).lower()) == core:
+                    return " ".join(words[i:i + n])
+    return ""
+
+
 def classify(subject: str, from_name: str, from_addr: str, body: str) -> dict | None:
     """Rule-based: returns {status, company, role} or None if this isn't about one of your applications."""
     text = f"{subject}\n{body[:6000]}"
-    if ALERT_SENDERS.search(from_addr or "") or NOT_JOB.search(subject or ""):
+    if ALERT_SENDERS.search(from_addr or "") or NOT_JOB.search(subject or "") or NEWS_NAME.search(from_name or ""):
         return None
     sender_is_ats = any((from_addr or "").lower().endswith(d) for d in ATS_DOMAINS)
     strong_body = any(rx.search(body[:3000]) for rx in (APPLIED, INTERVIEW_STRONG, OA_STRONG, OFFER, REJECT_STRONG))
@@ -193,6 +229,18 @@ def classify(subject: str, from_name: str, from_addr: str, body: str) -> dict | 
     if not company or company.lower() in ("greenhouse", "lever", "workday", "ashby", "linkedin", "indeed",
                                           "hackerrank", "codesignal", "icims", "smartrecruiters"):
         company = _domain_company(from_addr).title() or ""
+    # the company's own address is the surest sign (earlytalent@shopify.com is Shopify, whatever the email calls its
+    # program): used when the name found doesn't already start with it
+    own = _domain_company(from_addr)
+    found = company_key(company).replace(" ", "")
+    if own and len(own) >= 3 and not (found.startswith(own) or (len(found) >= 3 and found in own)):  # makenotion.com is Notion
+        company = _named_like_domain(from_addr, text) or own.title()
+    elif own and len(own) >= 3 and found.startswith(own) and found != own:
+        # "Shopify Early Talent" from shopify.com is Shopify; "Google DeepMind" from google.com keeps its name
+        words = company.split()
+        while len(words) > 1 and words[-1].lower().strip(".,") in _TEAM_TAIL:
+            words.pop()
+        company = " ".join(words)
     if role and not _ROLE_WORD.search(role):
         role = ""
     if not role:
@@ -444,14 +492,20 @@ def apply_status(pid: int, job_id: str, status: str, when: int, subject: str) ->
             c.execute("INSERT INTO applications (profile_id, job_id, status, source, applied_at, updated_at,"
                       " last_email_at, last_email_subject) VALUES (?,?,?,?,?,?,?,?)",
                       (pid, job_id, status, "email", when, db.now(), when, subject))
+            c.execute("UPDATE ready_queue SET status='applied', updated_at=? WHERE profile_id=? AND job_id=? AND status"
+                      " IN ('ready', 'opened')", (db.now(), pid, job_id))
             return True
         changed = STATUS_RANK.get(status, 0) > STATUS_RANK.get(cur["status"], 0)
         newer = when >= (cur["last_email_at"] or 0)
+        if status != "saved" and changed:  # an email says they applied: it's no longer waiting in Ready to apply
+            c.execute("UPDATE ready_queue SET status='applied', updated_at=? WHERE profile_id=? AND job_id=? AND status"
+                      " IN ('ready', 'opened')", (db.now(), pid, job_id))
+        # applied: the earliest email about it, so an email read late can't move the date forward
         c.execute("UPDATE applications SET status=?, updated_at=?, last_email_at=?, last_email_subject=?,"
-                  " applied_at=COALESCE(applied_at, ?) WHERE profile_id=? AND job_id=?",
+                  " applied_at=MIN(COALESCE(applied_at, ?), ?) WHERE profile_id=? AND job_id=?",
                   (status if changed else cur["status"],
                    db.now() if changed else cur["updated_at"],
                    when if newer else cur["last_email_at"],
                    subject if newer else cur["last_email_subject"],
-                   when, pid, job_id))
+                   when, when, pid, job_id))
         return changed

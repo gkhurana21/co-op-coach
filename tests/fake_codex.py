@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import tomllib
 
@@ -89,6 +90,7 @@ def main() -> None:
         print("codex-cli 0.155.0-test")
         return
     if args[:2] == ["login", "status"]:
+        time.sleep(float(os.environ.get("FAKE_CODEX_SLOW") or 0))
         print("Logged in using ChatGPT" if os.environ.get("FAKE_CODEX_SIGNED_OUT") != "1" else "Not logged in")
         sys.exit(0 if os.environ.get("FAKE_CODEX_SIGNED_OUT") != "1" else 1)
     if args[:1] in (["plugin"], ["mcp"]):

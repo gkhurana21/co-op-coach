@@ -3,7 +3,8 @@
     .venv/bin/python -m tools.discover_boards          # ~10 minutes, polite concurrency
 
 1. Mine SimplifyJobs' internship + new-grad listings for application links that point at Greenhouse, Lever,
-   Ashby or Workday boards (real boards companies have actually used).
+   Ashby or Workday boards (real boards companies have actually used), and Common Crawl's index for every other
+   Greenhouse, Ashby and Lever board the web links to (coopcoach.discover).
 2. Check every board live: keep it only if it responds and has open roles.
 3. For hiring Y Combinator companies not covered yet, try their likely Ashby/Greenhouse/Lever board names and keep a
    match only if it's confirmed: job titles match the company's YC job page, or the company's website/careers page
@@ -110,10 +111,20 @@ def main() -> None:
         live = [c for c in ex.map(check, cands) if c["alive"] and c["open"] > 0]
     print(f"{len(live)} alive with open roles ({sum(c['interns'] > 0 for c in live)} with internships now)")
 
+    # every other Greenhouse, Ashby and Lever board the public web links to (Common Crawl's index), checked the same way
+    from coopcoach import discover
+    known = {(c["ats"], c["slug"].lower()) for c in cands}
+    extra = sorted(k for k in discover.crawl_slugs(2, progress=print) if k not in known)
+    print(f"{len(extra)} more boards from Common Crawl; checking each live…")
+    with cf.ThreadPoolExecutor(24) as ex:
+        live += [{"ats": b["ats"], "slug": b["slug"], "name": b["name"], "open": b["roles"], "interns": b["interns"],
+                  "alive": True} for b in ex.map(lambda k: discover.check(*k), extra) if b]
+    print(f"{len(live)} live boards in all")
+
     seed = config.seed_companies()
     covered = {company_key(c["name"]) for c in live} | {company_key(e["name"]) for a in seed for e in seed.get(a) or []}
     companies.refresh_yc()
-    yc_all = json.loads(companies.YC_CACHE.read_text())
+    yc_all = json.loads(companies.YC_CACHE.read_text(encoding="utf-8"))
     hiring = [y for y in yc_all if y.get("is_hiring") and y.get("status") not in ("Inactive", "Acquired")]
     todo = []
     for y in hiring:
@@ -157,7 +168,7 @@ def main() -> None:
               f"# live on {today} (dead or mismatched boards dropped). interns_seen = internships open at that check.\n"
               f"# Regenerate with `python -m tools.discover_boards`; hand-picked companies live in seed_companies.yaml.\n")
     (config.PKG / "boards_discovered.yaml").write_text(
-        header + yaml.safe_dump({"boards": boards}, sort_keys=False, allow_unicode=True, width=200))
+        header + yaml.safe_dump({"boards": boards}, sort_keys=False, allow_unicode=True, width=200), encoding="utf-8")
     print(f"wrote {len(boards)} boards:", dict(collections.Counter(b["ats"] for b in boards)))
 
 

@@ -50,8 +50,8 @@ def check_site(h: dict) -> tuple[dict, int, str]:
 
 
 def check() -> int:
-    sources = yaml.safe_load((config.PKG / "event_sources.yaml").read_text())["sources"]
-    majors = yaml.safe_load((config.PKG / "major_hackathons.yaml").read_text())["hackathons"]
+    sources = yaml.safe_load((config.PKG / "event_sources.yaml").read_text(encoding="utf-8"))["sources"]
+    majors = yaml.safe_load((config.PKG / "major_hackathons.yaml").read_text(encoding="utf-8"))["hackathons"]
     bad = 0
     with cf.ThreadPoolExecutor(8) as ex:
         for src, n, kept, err in ex.map(check_source, sources):

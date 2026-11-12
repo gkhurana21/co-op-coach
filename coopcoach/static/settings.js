@@ -1,7 +1,7 @@
-/* ⚙ Settings: profile & resume, alerts, AI, inbox & Workday, sources (events + job sites), account & data.
+/* ⚙ Settings: profile & resume, alerts, AI, inbox, sources (events + job sites), account & data.
    Loaded before app.js; uses its helpers ($, api, esc, toast, S, ...) at call time. */
 
-const SETTINGS = [["profile", "Profile & resume"], ["alerts", "Alerts"], ["ai", "AI"], ["tracking", "Inbox & Workday"],
+const SETTINGS = [["profile", "Profile & resume"], ["alerts", "Alerts"], ["ai", "AI & extension"], ["tracking", "Inbox"],
   ["sources", "Sources"], ["account", "Account & data"]];
 const OLD_SECTIONS = { inbox: "tracking", workday: "tracking", jobs: "sources", events: "sources", data: "account" };
 
@@ -19,9 +19,8 @@ function renderSettings() {
 }
 
 function settingsTracking(body) {
-  body.innerHTML = `<div class="stack" style="max-width:860px"><div id="set-inbox"></div><div id="workday-card"></div></div>`;
+  body.innerHTML = `<div class="stack" style="max-width:860px"><div id="set-inbox"></div></div>`;
   settingsInbox($("#set-inbox"));
-  renderWorkdayCard();
 }
 
 function settingsSources(body) {
@@ -192,7 +191,12 @@ function settingsAlerts(body) {
 // ---------- Passcode & account ----------
 function settingsAccount(body) {
   const p = profile();
+  const lean = (S.app.features?.mode || "lean") === "lean";
   body.innerHTML = `<div class="stack" style="max-width:640px">
+    <div class="card card-pad stack"><div class="row"><h2>Features</h2><span class="spacer"></span><span class="tag">${lean ? "Lean" : "Everything"}</span></div>
+      <p class="muted small" style="margin:0"><b>Lean</b> shows the main things: jobs, applications, your inbox, calendar, Path and Jarvis. <b>Everything</b> also shows recruiters, browsing by track, public events, hackathons and Excel export. Switching never deletes anything.</p>
+      <div class="row"><button class="btn btn-sm ${lean ? "btn-primary" : ""}" data-features="lean">Lean</button><button class="btn btn-sm ${lean ? "" : "btn-primary"}" data-features="all">Everything</button></div></div>
+
     <form class="card card-pad stack" id="pc-form">
       <div class="row"><h2>Passcode</h2><span class="spacer"></span><span class="tag ${p.has_passcode ? "good" : "warn"}">${p.has_passcode ? "On" : "Off"}</span></div>
       <p class="muted small" style="margin:0">${p.has_passcode ? `Locks ${esc(p.name)}'s data. Auto-locks after ${S.app.auto_lock_minutes} idle minutes.` : "Anyone using this browser can open this profile."}</p>
@@ -232,6 +236,12 @@ function settingsAccount(body) {
     await api(`/api/profiles/${S.pid}`, { method: "DELETE" });
     S.pid = null; await loadState(); render();
   });
+  body.querySelectorAll("[data-features]").forEach((b) => b.addEventListener("click", async () => {
+    const r = await api("/api/features", { method: "PUT", json: { mode: b.dataset.features } });
+    S.app.features = r;
+    toast(r.mode === "lean" ? "Lean: the extra parts are tucked away" : "Everything is back");
+    renderNav(); openSettings("account");
+  }));
 }
 
 // ---------- Inbox ----------
@@ -246,8 +256,9 @@ async function settingsInbox(body) {
     <p class="muted small" style="margin:0">Recruiting emails move your applications along by themselves. Passwords stay in the Keychain. No inbox? Paste any email into the chat or Applications.</p>
     ${accts.map((a) => `<div class="acct-row ${a.enabled && tracking ? "" : "off"}">
         <label class="switch" title="Track this inbox"><input type="checkbox" data-acct-toggle="${a.id}" ${a.enabled ? "checked" : ""}><span></span></label>
-        <div style="flex:1;min-width:200px"><b>${esc(a.address)}</b> <span class="tag">${a.kind === "outlook" ? "Microsoft" : a.host === "imap.gmail.com" ? "Gmail" : esc((a.host || "IMAP").replace(/^imap\.(mail\.)?/, ""))}</span>
+        <div style="flex:1;min-width:200px"><b>${esc(a.address)}</b> <span class="tag">${a.kind === "outlook" || a.kind === "outlook_web" ? "Outlook" : a.host === "imap.gmail.com" ? "Gmail" : esc((a.host || "IMAP").replace(/^imap\.(mail\.)?/, ""))}</span>
         <div class="small muted">${a.enabled ? `<span class="dot ${String(a.last_status || "").startsWith("error") ? "err" : a.last_status ? "ok" : ""}"></span>${esc(a.last_status || "first scan in progress…")}${a.last_sync ? ` · ${ago(a.last_sync)}` : ""}` : "paused"}</div></div>
+        ${a.kind === "outlook_web" && /sign in again/i.test(a.last_status || "") ? `<button class="btn btn-sm" data-owa-again="${esc(a.address)}">Sign in again</button><span class="muted small" id="owa-flow"></span>` : ""}
         <button class="btn btn-ghost btn-sm" data-del-acct="${a.id}">Disconnect</button></div>`).join("")}
     <details class="connect" id="conn" ${accts.length ? "" : "open"}>
       <summary>＋ Connect ${accts.length ? "another" : "an"} inbox</summary>
@@ -258,6 +269,7 @@ async function settingsInbox(body) {
       </div>
     </details>
   </div>`;
+  body.querySelectorAll("[data-owa-again]").forEach((b) => b.addEventListener("click", () => startOutlookWeb(b.dataset.owaAgain)));
   body.querySelectorAll("[data-del-acct]").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Disconnect this inbox? Your tracker keeps everything found so far.")) return;
     await api(`/api/email/accounts/${b.dataset.delAcct}`, { method: "DELETE" }); renderSettings();
@@ -292,10 +304,14 @@ async function settingsJobs(body) {
   const label = { simplify: "SimplifyJobs list", greenhouse: "Greenhouse boards", lever: "Lever boards", ashby: "Ashby boards", workday: "Workday sites", successfactors: "SuccessFactors sites", jibe: "Jibe sites", yc: "Y Combinator pages", linkedin: "LinkedIn search", indeed: "Indeed search" };
   body.innerHTML = `<div class="card card-pad stack">
       <div class="row"><h2>Job sources</h2><span class="spacer"></span><span class="muted small">${cos.length.toLocaleString()} career sites · ${cos.filter((c) => c.last_count > 0).length.toLocaleString()} hiring interns</span></div>
-      <details class="small"><summary class="muted" style="cursor:pointer">Last sync ${S.app.sync.last_finished ? `${ago(S.app.sync.last_finished)} · ${rep.new_jobs ?? 0} new · ${rep.closed_jobs ?? 0} closed` : "never"}</summary>
+      <details class="small"><summary class="muted" style="cursor:pointer">Last sync ${S.app.sync.last_finished ? `${ago(S.app.sync.last_finished)} · ${(rep.new_jobs || rep.shared_feed?.new || 0).toLocaleString()} new · ${(rep.closed_jobs || rep.shared_feed?.closed || 0).toLocaleString()} closed` : "never"}</summary>
         <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Source</th><th>Status</th><th>Internships</th></tr></thead><tbody>
-          ${Object.entries(agg).map(([k, v]) => `<tr><td>${esc(label[k] || k)}</td><td><span class="dot ${v.fail ? "err" : "ok"}"></span>${v.ok} ok${v.fail ? `, <span title="${esc(v.errors.join("\n"))}">${v.fail} failed</span>` : ""}</td><td>${v.count.toLocaleString()}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No sync yet</td></tr>'}
+          ${Object.entries(agg).map(([k, v]) => `<tr><td>${esc(label[k] || k)}</td><td><span class="dot ${v.fail ? "err" : "ok"}"></span>${v.ok} ok${v.fail ? `, <span title="${esc(v.errors.join("\n"))}">${v.fail} failed</span>` : ""}</td><td>${v.count.toLocaleString()}</td></tr>`).join("")}
+          ${rep.shared_feed ? `<tr><td>Shared job feed</td><td><span class="dot ok"></span>up to date${rep.shared_feed.changed ? ` · ${rep.shared_feed.changed.toLocaleString()} updated` : ""}</td><td>${(rep.total_active || 0).toLocaleString()}</td></tr>` : ""}
+          ${!Object.keys(agg).length && !rep.shared_feed ? '<tr><td colspan="3" class="muted">No sync yet</td></tr>' : ""}
         </tbody></table></div></details>
+      <div class="row small" id="disc-row"><span class="muted" id="disc-text">Finding new company boards…</span><span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" id="disc-btn" title="Look for Greenhouse, Ashby and Lever boards the web links to that Co-op Coach doesn't read yet (a few minutes, in the background)">🔎 Find new boards</button></div>
       <form class="row" id="co-form" style="flex-wrap:wrap">
         <input type="url" id="co-url" placeholder="Add a career site: Greenhouse, Lever, Ashby, Workday or YC link" required style="flex:2 1 260px">
         <input type="text" id="co-name" placeholder="Company" style="flex:1 1 120px">
@@ -307,6 +323,12 @@ async function settingsJobs(body) {
     </div>`;
   $("#co-search").addEventListener("input", (e) => { S.coSearch = e.target.value; $("#co-rows").innerHTML = coRows(cos); bindCoRows(); });
   bindCoRows();
+  drawDiscover();
+  $("#disc-btn").addEventListener("click", async () => {
+    await api("/api/discover", { method: "POST" });
+    toast("Looking for new company boards in the background: a few minutes");
+    drawDiscover();
+  });
   $("#co-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = $("#co-btn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Checking site…';
@@ -388,6 +410,81 @@ const SKILLS = [
   ["resume", "review, or tailor for a posting"],
 ];
 
+// Signing in happens in Terminal and the browser, out of the page's sight: after "Sign in…", ask every 2 s (the server
+// re-checks behind it) until it's done or 3 minutes pass, and check right away when you come back to this window.
+const SIGNIN = { claude: { btn: "cc-signin", name: "Claude Code" }, codex: { btn: "cx-signin", name: "ChatGPT (Codex)" } };
+const signinWatch = {};
+let signinRecheckAt = 0;
+
+async function checkSignin(kind, refresh) {
+  let st;
+  try { st = await api(`/api/${kind}/status?profile_id=${S.pid}${refresh ? "&refresh=true" : ""}`); } catch { return; }
+  if (!st.logged_in || (!signinWatch[kind] && !document.getElementById(SIGNIN[kind].btn))) return;
+  stopSignin(kind);
+  toast(`${SIGNIN[kind].name} is signed in`);
+  await loadState();
+  if (document.getElementById(SIGNIN[kind].btn)) renderSettings();
+}
+
+function watchSignin(kind) {
+  stopSignin(kind);
+  const w = signinWatch[kind] = { until: Date.now() + 180000, busy: false };
+  w.timer = setInterval(async () => {
+    if (Date.now() > w.until) return stopSignin(kind);
+    if (w.busy) return;
+    w.busy = true;
+    try { await checkSignin(kind, false); } finally { w.busy = false; }
+  }, 2000);
+}
+
+function stopSignin(kind) { clearInterval(signinWatch[kind]?.timer); delete signinWatch[kind]; }
+
+function recheckSignin() {
+  if (document.hidden || Date.now() - signinRecheckAt < 1500) return;  // focus and visibilitychange often fire together
+  signinRecheckAt = Date.now();
+  for (const kind of Object.keys(SIGNIN)) if (signinWatch[kind] || document.getElementById(SIGNIN[kind].btn)) checkSignin(kind, true);
+}
+window.addEventListener("focus", recheckSignin);
+document.addEventListener("visibilitychange", recheckSignin);
+
+function extensionCard() {
+  return `
+    <div class="card card-pad stack"><h2>Chrome extension</h2>
+      <p style="margin:0">Co-op Coach in a side panel next to any website, so you don't have to switch back to this app.</p>
+      <ul class="clean small">
+        <li><b>Fills applications for you.</b> On a job application page, press <i>Fill this form</i>: it types your details and answers and attaches your tailored resume. You check it and press Submit yourself.</li>
+        <li><b>Marks it applied.</b> After you submit, one click moves it to Applied in your tracker.</li>
+        <li><b>Your day at a glance.</b> What's ready to apply, what's coming up and your NeetCode streak while you browse.</li>
+        <li><b>Reads your Outlook tab.</b> Only needed if Microsoft sign-in doesn't work for your school.</li>
+      </ul>
+      <div class="ext-steps"><div class="tel">Set it up once · about a minute · not on the Chrome Web Store yet, so it installs from this computer</div>
+        <ol class="steps">
+          <li>Open a new Chrome tab and go to <button type="button" class="chip ext-copy" data-copy="chrome://extensions">chrome://extensions</button> <span class="muted">(click to copy, then paste it in the address bar)</span></li>
+          <li>Turn on <b>Developer mode</b>, top right.</li>
+          <li>Click <b>Load unpacked</b> and choose ${S.app.extension_dir ? `this folder: <button type="button" class="chip ext-copy" data-copy="${esc(S.app.extension_dir)}">${esc(S.app.extension_dir)}</button> <span class="muted">(on a Mac, press ⌘⇧G in the file window and paste it)</span>` : "the <b>extension</b> folder inside your coop-coach folder."}</li>
+          <li>Click the puzzle piece in Chrome's toolbar, then <b>Co-op Coach</b>. A side panel opens.</li>
+          <li>Press <b>Get a code</b> below, paste it into the panel and press <b>Connect</b>.</li>
+        </ol>
+        <div class="muted small">The code works for 5 minutes. Restarted Chrome or the app? Get a new code and connect again.</div></div>
+      <div class="row"><button class="btn" id="extension-connect">Get a code</button><button class="btn btn-ghost" id="extension-revoke">Disconnect</button></div><output id="extension-code" style="overflow-wrap:anywhere;user-select:all"></output></div>`;
+}
+
+function bindExtensionCard() {
+  $("#extension-connect").addEventListener("click", async () => {
+    try { const r = await api("/api/extension/code", {method: "POST", json: {profile_id: S.pid}}); $("#extension-code").innerHTML = `<span class="ext-code">${esc(r.code)}</span> <button type="button" class="btn btn-ghost btn-sm ext-copy" data-copy="${esc(r.code)}">Copy</button>`; }
+    catch (e) { toast(e.message, 5000); }
+  });
+  $("#extension-connect").closest(".card").addEventListener("click", async (e) => {
+    const b = e.target.closest(".ext-copy");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast("Copied"); } catch { toast("Couldn't copy. Select it and copy it yourself", 4000); }
+  });
+  $("#extension-revoke").addEventListener("click", async () => {
+    try { await api("/api/extension/disconnect", {method: "POST", json: {profile_id: S.pid}}); $("#extension-code").textContent = "Disconnected."; }
+    catch (e) { toast(e.message, 5000); }
+  });
+}
+
 async function settingsAI(body) {
   const [cc, cx] = await Promise.all([api(`/api/claude/status?profile_id=${S.pid}`), api(`/api/codex/status?profile_id=${S.pid}`)]);
   const engine = cc.engine, using = cc.provider;
@@ -398,8 +495,8 @@ async function settingsAI(body) {
   const connected = cc.connections.length > 0;
   body.innerHTML = `<div class="stack" style="max-width:860px">
     <div class="card card-pad stack">
-      <div class="row"><h2>AI engine</h2><span class="spacer"></span><span class="muted small">Now: <b>${esc(cc.label || "built-in rules")}</b></span></div>
-      <p class="muted small" style="margin:0">Runs the chat, Autopilot, letters, answers and reviews on your own plan. Groq (free) steps in if it's busy.</p>
+      <div class="row"><h2>Your AI</h2><span class="spacer"></span><span class="muted small">Now: <b>${esc(cc.label || "built-in rules")}</b></span></div>
+      <p class="muted small" style="margin:0">The AI that writes your cover letters and answers, reviews your resume and chats as Jarvis. Connect the one you already pay for; a free one fills in if it's busy.</p>
       <div class="engine ${using === "claude_code" ? "on" : ""}">
         <div style="flex:1"><b>Claude Code</b> <span class="muted small">your Claude plan</span><div class="small">${line(cc, "Claude", "cc-signin")}</div></div>
         <label class="switch"><input type="radio" name="engine" value="claude_code" ${engine === "claude_code" ? "checked" : ""} ${cc.installed ? "" : "disabled"}><span></span>Use</label></div>
@@ -421,13 +518,17 @@ async function settingsAI(body) {
       <details class="small"><summary class="muted" style="cursor:pointer">Commands you can type there</summary>
         <div class="ap-skills" style="margin-top:6px">${SKILLS.map(([c, d]) => `<div><code>/coop-coach:${esc(c)}</code> <span class="muted">${esc(d)}</span></div>`).join("")}
         <div class="muted">In ChatGPT (Codex): <code>$autopilot</code>, or just ask.</div></div></details>
-    </div></div>`;
-  const signin = (url) => async () => {
-    try { await api(url, { method: "POST", json: { profile_id: S.pid } }); toast("Terminal opened: finish signing in, then come back", 7000); }
-    catch (e) { toast(e.message, 6000); }
+    </div>${extensionCard()}</div>`;
+  bindExtensionCard();
+  const signin = (kind) => async () => {
+    try {
+      await api(`/api/${kind}/signin`, { method: "POST", json: { profile_id: S.pid } });
+      toast("Terminal opened: finish signing in there. This page updates by itself.", 7000);
+      watchSignin(kind);
+    } catch (e) { toast(e.message, 6000); }
   };
-  $("#cc-signin")?.addEventListener("click", signin("/api/claude/signin"));
-  $("#cx-signin")?.addEventListener("click", signin("/api/codex/signin"));
+  $("#cc-signin")?.addEventListener("click", signin("claude"));
+  $("#cx-signin")?.addEventListener("click", signin("codex"));
   body.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener("change", async () => {
     try { await api("/api/claude/engine", { method: "PUT", json: { profile_id: S.pid, engine: r.value } }); await loadState(); renderSettings(); }
     catch (err) { toast(err.message, 6000); renderSettings(); }
@@ -461,5 +562,58 @@ async function settingsData(body) {
       ${d.counts ? `<div class="summary-line">${Object.entries(d.counts).map(([k, n]) => `<b>${n.toLocaleString()}</b> ${k}`).join(" · ")}</div>` : ""}
       ${d.error ? `<div class="banner">⚠️ ${esc(d.error)}</div>` : ""}`
       : `<p class="muted small" style="margin:0">In a database file on this computer. The README shows how to move it to your own Supabase project (for a calendar link that works anywhere).</p>`}
-  </div>`;
+  </div>
+  <div class="card card-pad stack" id="feed-card"><div class="muted small"><span class="spinner"></span></div></div>`;
+  drawFeed();
+}
+
+// the shared job feed: a crawler reads every board a few times a day, and this app pulls what changed
+async function drawFeed() {
+  const el = $("#feed-card");
+  if (!el) return;
+  const f = await api("/api/central").catch(() => null);
+  if (!f || !$("#feed-card")) return;
+  const times = f.crawls.length > 1 ? `${f.crawls.slice(0, -1).join(", ")} and ${f.crawls.at(-1)}` : f.crawls.join("");
+  const last = f.last_pull || {}, crawl = f.last_crawl;
+  el.innerHTML = `<div class="row"><h2>Shared job feed</h2><span class="spacer"></span><span class="tag ${f.on ? "good" : ""}">${f.on ? "On" : "Off"}</span></div>
+    ${f.on ? `<p class="muted small" style="margin:0">One crawler reads every board at ${esc(times)} (your time), with quick checks of the boards that just posted in between. Every 15 minutes this app copies what changed (in seconds) and checks the boards that matter most to you itself (niches you follow, companies you starred or applied to, the boards behind your best matches), instead of reading about 9,500 boards.</p>
+      ${f.stale ? `<div class="banner">⚠️ The crawler hasn't run ${crawl ? `since ${ago(crawl.finished_at)}` : "yet"}, so this app reads every board itself until it's back.</div>` : ""}
+      <div class="summary-line">${crawl ? `Last crawl <b>${ago(crawl.finished_at)}</b> (${esc(crawl.kind || "full")})` : "No crawl yet"}
+        · <b>${(f.open || 0).toLocaleString()}</b> open postings${f.pulled_at ? ` · checked ${ago(f.pulled_at)}${last.new ? `, <b>${last.new}</b> new` : ""}` : ""}
+        ${f.local_boards ? ` · <b>${f.local_boards}</b> board${f.local_boards > 1 ? "s" : ""} you added, read here` : ""}</div>
+      <div class="row"><button class="btn btn-ghost btn-sm" id="feed-pull">Check now</button><span class="spacer"></span><button class="btn btn-ghost btn-sm" id="feed-off">Read every board myself instead</button></div>`
+    : f.available ? `<p class="muted small" style="margin:0">Your Supabase project has the shared feed: a crawler reads every board at ${esc(times)} and this app copies what changed in seconds, instead of reading about 9,500 boards itself (a minute or more, every few hours).</p>
+      <div class="row"><button class="btn btn-primary btn-sm" id="feed-on">Use the shared feed</button></div>`
+    : `<p class="muted small" style="margin:0">Co-op Coach checks every company's job page itself, every few hours (about a minute each time).</p>`}`;
+  $("#feed-on")?.addEventListener("click", async (e) => {
+    e.target.disabled = true; e.target.innerHTML = '<span class="spinner"></span> Copying the feed…';
+    try { const r = await api("/api/central", { method: "POST", json: { on: true } }); toast(`Shared feed on: ${(r.changed || 0).toLocaleString()} postings up to date in ${r.seconds}s`); }
+    catch (err) { toast(err.message, 6000); }
+    drawFeed();
+  });
+  $("#feed-off")?.addEventListener("click", async () => {
+    if (!confirm("Read every board on this computer again? Syncs take a minute or more instead of seconds.")) return;
+    await api("/api/central", { method: "POST", json: { on: false } }).catch((err) => toast(err.message));
+    drawFeed();
+  });
+  $("#feed-pull")?.addEventListener("click", async (e) => {
+    e.target.disabled = true; e.target.innerHTML = '<span class="spinner"></span> Checking…';
+    await api("/api/sync", { method: "POST" }).catch((err) => toast(err.message));
+    setTimeout(drawFeed, 4000);
+  });
+}
+
+// new boards found on the public web (Common Crawl and SimplifyJobs links), about once a month or on request
+async function drawDiscover() {
+  const el = $("#disc-text"), btn = $("#disc-btn");
+  if (!el) return;
+  const d = await api("/api/discover").catch(() => null);
+  if (!d || !$("#disc-text")) return;
+  const last = d.last || {};
+  btn.disabled = d.running;
+  el.innerHTML = d.running ? `<span class="spinner"></span> ${esc(d.progress || "Finding new boards")}…`
+    : last.error ? `Finding new boards failed ${ago(last.at)}: ${esc(last.error)}`
+    : last.at ? `New boards: <b>${(last.added || 0).toLocaleString()}</b> found ${ago(last.at)} (${(last.with_internships || 0).toLocaleString()} with internships open) · checks again monthly`
+    : "Co-op Coach looks for new Greenhouse, Ashby and Lever boards once a month.";
+  if (d.running) setTimeout(drawDiscover, 4000);
 }

@@ -20,6 +20,12 @@ CAMPUS_JOB_RE = re.compile(r"work[- ]study|student (?:wage|worker|employee|assis
                            r"\bstudent hourly\b|\btutor\b|\bgrader\b|\bteaching assistant\b", re.I)
 
 
+def senior_title(title: str) -> bool:
+    """'Senior Staff Engineer', 'Engineering Manager': a role for people with years of experience (LinkedIn and
+    Indeed searches bring some in)."""
+    return bool(NOT_INTERN_RE.search(title or "") and not INTERN_RE.search(title or ""))
+
+
 def is_internship(title: str, extra: str = "") -> bool:
     if NOT_INTERN_RE.search(title) and not re.search(r"\bintern", title, re.I):
         return False
@@ -29,7 +35,7 @@ def is_internship(title: str, extra: str = "") -> bool:
 
 
 _CAT_RULES = [
-    ("Quant", r"\b(quant\w*|trad(er|ing)|market mak\w+|algorithmic)\b"),
+    ("Quant", r"\b(quant(?!um)\w*|trad(er|ing)|market mak\w+|algorithmic)\b"),
     ("AI/ML/Data", r"\b(machine learning|ml|ai|artificial intelligence|data scien\w*|data analy\w*|data engineer\w*|"
                    r"analytics|deep learning|nlp|computer vision|research scientist|llm|business intelligence|bi developer)\b"),
     ("Hardware", r"\b(hardware|firmware|embedded|asic|fpga|electrical|silicon|circuit|rf|soc|vlsi|pcb|"
@@ -63,14 +69,43 @@ SIMPLIFY_CATEGORY = {
 # business functions that happen to contain a tech word ("Developer Marketing", "Sales Engineer... intern" excluded)
 NONTECH_RE = re.compile(r"\b(marketing|sales|recruit\w*|talent|growth marketing|community|content|communications|"
                         r"social media|brand\w*|partnerships?|customer success|account (?:exec\w*|manag\w*)|"
-                        r"business development|people ops|copywrit\w*|public relations|events? coordinator)\b", re.I)
+                        r"business develop\w*|people ops|copywrit\w*|public relations|events? coordinator|"
+                        r"business operations|commercial (?:ops|operations)|revenue operations|supply chain|legal|paralegal|law clerk)\b", re.I)
 _TECH_CORE_RE = re.compile(r"\b(engineer\w*|software|swe|sde|programmer|data scien\w*|machine learning|ml engineer)\b",
                            re.I)
 
 
-def classify_category(title: str, description: str = "") -> str:
+# engineering that isn't software, though "engineering intern" alone reads like it
+_SOFTWARE_CORE_RE = re.compile(r"\b(software|developer|programmer|swe|sde|full[- ]?stack|back-?end|front-?end|devops|cyber\w*|web|"
+                               r"cloud|machine learning|ml|ai|data scien\w*|data analy\w*|data engineer\w*|firmware|embedded|(?-i:IT))\b", re.I)
+_HARDWARE_ENG_RE = re.compile(r"\b(manufactur\w*|\w*mechanical|industrial eng\w*|process eng\w*|materials? (?:eng\w*|scien\w*)|packaging|"
+                              r"aerospace|aeronautic\w*|propulsion|structural|production eng\w*|tooling|thin films?|mems|photonics)\b", re.I)
+_OTHER_ENG_RE = re.compile(r"\b(civil|chemical eng\w*|environmental|biomedical|bioprocess|geotechnical|traffic|transportation eng\w*|"
+                           r"\w*construction|petroleum|mining eng\w*|nuclear|agricultur\w*|water resources|hvac|rail)\b", re.I)
+
+
+_REFINE_ANY_RE = re.compile("|".join(r.pattern for r in (NONTECH_RE, _HARDWARE_ENG_RE, _OTHER_ENG_RE)), re.I)  # most titles: one look
+
+
+def refine_category(title: str, category: str | None) -> str:
+    """What a title says over the category stored with it: "Manufacturing Engineering Intern" isn't a Software role however the
+    source labelled it, and "Business Operations, Analytics" isn't data science."""
+    if not _REFINE_ANY_RE.search(title):
+        return category or "Other"
     if NONTECH_RE.search(title) and not _TECH_CORE_RE.search(title):
         return "Business/Finance"
+    if not _SOFTWARE_CORE_RE.search(title):
+        if _OTHER_ENG_RE.search(title):
+            return "Other"
+        if _HARDWARE_ENG_RE.search(title):
+            return "Hardware"
+    return category or "Other"
+
+
+def classify_category(title: str, description: str = "") -> str:
+    known = refine_category(title, "?")
+    if known != "?":
+        return known
     for cat, rx in _CAT_RES:
         if rx.search(title):
             return cat
@@ -191,74 +226,121 @@ _SK = {
     "Java": (r"\bjava\b(?!script)", ["Software"]),
     "C++": (r"\bc\+\+|\bcpp\b", ["Software", "Quant", "Hardware"]),
     "C": (r"(?<![\w#+/])C(?=\s*(?:/|,)\s*C\+\+)|\bC programming\b|\bANSI C\b|\bEmbedded C\b", ["Hardware", "Software"]),
-    "C#": (r"\bc#|\.net\b", ["Software"]),
+    "C#": (r"\bc#|(?<![\w.-])\.net\b|\b(?:asp|vb|ado)\.net\b", ["Software"]),  # not careers@acme.net
     "JavaScript": (r"\bjavascript\b|\bjs\b|\becmascript\b", ["Software"]),
     "TypeScript": (r"\btypescript\b", ["Software"]),
     "Go": (r"\bgolang\b|\bGo(?=\s*(?:,|/|\)|and\b))", ["Software"]),
     "Rust": (r"\brust\b", ["Software"]),
     "Kotlin": (r"\bkotlin\b", ["Software"]),
-    "Swift": (r"\bswift(?:ui)?\b", ["Software"]),
+    "Swift": (r"(?-i:\bSwift(?:UI)?\b)|\bswiftui\b", ["Software"]),  # not "a swift reply" or SWIFT payments
     "R": (r"(?<![\w-])R(?=\s*(?:,|/)\s*(?:python|sql|matlab|sas|stata))|\bR programming\b|\bRStudio\b", ["AI/ML/Data"]),
     "SQL": (r"\bsql\b|\bpostgres(?:ql)?\b|\bmysql\b|\bsqlite\b|\bt-sql\b", ["AI/ML/Data", "Software", "Business/Finance"]),
     "MATLAB": (r"\bmatlab\b|\bsimulink\b", ["Hardware", "AI/ML/Data"]),
     "Scala": (r"\bscala\b", ["Software", "AI/ML/Data"]),
-    "Ruby": (r"\bruby\b|\brails\b", ["Software"]),
+    "Ruby": (r"\bruby\b|(?-i:\bRails\b)", ["Software"]),  # not "power rails" or "guard rails"
     "PHP": (r"\bphp\b|\blaravel\b", ["Software"]),
     "Bash": (r"\bbash\b|\bshell scripting\b|\bzsh\b", ["Software"]),
     "HTML/CSS": (r"\bhtml5?\b|\bcss3?\b|\btailwind\b|\bsass\b", ["Software"]),
     "Verilog/VHDL": (r"\bverilog\b|\bsystemverilog\b|\bvhdl\b", ["Hardware"]),
-    "Assembly": (r"\bassembly\b|\bx86\b|\barm assembly\b", ["Hardware"]),
+    # the language, not "PCB assembly" or an assembly line
+    "Assembly": (r"\bassembly (?:language|code|programming)\b|\bx86\b|(?-i:\b(?:ARM|MIPS|RISC-V|AVR)) assembly\b|"
+                 r"(?<=\bc, )assembly\b|(?<=\bc/)assembly\b|(?<=\bc\+\+, )assembly\b|(?<=\bc\+\+/)assembly\b", ["Hardware"]),
     "OCaml/Haskell": (r"\bocaml\b|\bhaskell\b|\bf#\b", ["Quant", "Software"]),
     "Dart/Flutter": (r"\bdart\b|\bflutter\b", ["Software"]),
     "Solidity": (r"\bsolidity\b|\bweb3\b|\bsmart contracts?\b", ["Software"]),
-    "React": (r"\breact(?:\.js|js)?\b(?! native)", ["Software", "Product/Design"]),
+    "React": (r"\breact(?:\.js|js)\b|(?-i:\bReact\b)(?! native)", ["Software", "Product/Design"]),  # not "react quickly"
     "React Native": (r"\breact native\b", ["Software"]),
     "Next.js": (r"\bnext\.?js\b", ["Software"]),
-    "Node.js": (r"\bnode(?:\.js|js)?\b|\bexpress(?:\.js)?\b|\bnestjs\b", ["Software"]),
+    # not a "process node", "express interest" or American Express
+    "Node.js": (r"\bnode\.?js\b|(?-i:\bNode\b)|\bexpress\.?js\b|\bnestjs\b", ["Software"]),
     "Vue/Angular/Svelte": (r"\bvue(?:\.js)?\b|\bangular\b|\bsvelte\b", ["Software"]),
     "Django/Flask/FastAPI": (r"\bdjango\b|\bflask\b|\bfastapi\b", ["Software"]),
-    "Spring": (r"\bspring(?: boot)?\b", ["Software"]),
+    # the Java framework, not the Spring term
+    "Spring": (r"\bspring (?:boot|framework|mvc|cloud|security|batch|webflux)\b|"
+               r"(?:(?<=\bjava/)|(?<=\bjava, )|(?<=\bjava )|(?<=\bjava and )|(?<=\bjava & ))spring\b(?!\s*['’]?\d)|"
+               r"\bspring(?=\s*(?:[/,&]|and)\s*(?:java|hibernate)\b)", ["Software"]),
     "PyTorch": (r"\bpytorch\b|\btorch\b", ["AI/ML/Data"]),
     "TensorFlow/Keras": (r"\btensorflow\b|\bkeras\b|\bjax\b", ["AI/ML/Data"]),
     "scikit-learn": (r"\bscikit[- ]learn\b|\bsklearn\b|\bxgboost\b|\blightgbm\b", ["AI/ML/Data"]),
     "Pandas/NumPy": (r"\bpandas\b|\bnumpy\b|\bscipy\b|\bpolars\b", ["AI/ML/Data", "Quant"]),
     "LLMs/GenAI": (r"\bllms?\b|\blarge language models?\b|\bgenai\b|\bgenerative ai\b|\brag\b|\blangchain\b|"
-                   r"\bhugging ?face\b|\btransformers?\b|\bprompt engineering\b|\bopenai\b|\bclaude\b", ["AI/ML/Data"]),
+                   r"\bhugging ?face\b|\btransformers?(?:-based|[- ]models?|[- ]architectures?|[- ]networks?)\b|"
+                   r"\bprompt engineering\b|\bopenai\b|\bclaude\b", ["AI/ML/Data"]),  # not power transformers
     "Computer Vision": (r"\bcomputer vision\b|\bopencv\b|\byolo\b|\bimage processing\b", ["AI/ML/Data"]),
-    "Spark/Big Data": (r"\bspark\b|\bpyspark\b|\bhadoop\b|\bkafka\b|\bairflow\b|\bdbt\b|\bdatabricks\b|"
-                       r"\bsnowflake\b|\bbigquery\b|\bredshift\b", ["AI/ML/Data"]),
+    # Spark and Airflow written as tools, not "spark ideas" or airflow in a thermal design
+    "Spark/Big Data": (r"(?-i:\bSpark\b)|\bapache spark\b|\bspark sql\b|\bpyspark\b|\bhadoop\b|\bkafka\b|"
+                       r"(?-i:\bAirflow\b)|\bapache airflow\b|\bdbt\b|\bdatabricks\b|\bsnowflake\b|\bbigquery\b|"
+                       r"\bredshift\b", ["AI/ML/Data"]),
     "Statistics": (r"\bstatistic\w*\b|\bprobability\b|\bstochastic\b|\btime series\b|\beconometric\w*\b|"
-                   r"\bregression\b", ["AI/ML/Data", "Quant"]),
-    "AWS": (r"\baws\b|\bamazon web services\b|\bec2\b|\bs3\b|\blambda\b", ["Software"]),
+                   r"\bregression\b(?!\s+(?:test\w*|suites?|bugs?)\b)", ["AI/ML/Data", "Quant"]),  # not regression tests
+    "AWS": (r"\baws\b|\bamazon web services\b|\bec2\b|\bs3\b", ["Software"]),
     "GCP": (r"\bgcp\b|\bgoogle cloud\b", ["Software"]),
     "Azure": (r"\bazure\b", ["Software"]),
-    "Docker/Kubernetes": (r"\bdocker\b|\bkubernetes\b|\bk8s\b|\bcontainers?\b", ["Software"]),
+    "Docker/Kubernetes": (r"\bdocker\b|\bkubernetes\b|\bk8s\b|\bcontaineri[sz](?:ed|ation|ing)\b|"
+                          r"\bcontainer orchestration\b", ["Software"]),  # not shipping containers
     "Terraform/IaC": (r"\bterraform\b|\bansible\b|\binfrastructure as code\b", ["Software"]),
     "CI/CD": (r"\bci/cd\b|\bgithub actions\b|\bjenkins\b|\bcircleci\b|\bcontinuous integration\b", ["Software"]),
     "Git": (r"\bgit\b|\bgithub\b|\bgitlab\b", ["Software"]),
     "Linux": (r"\blinux\b|\bunix\b", ["Software", "Hardware"]),
     "Databases": (r"\bmongodb\b|\bredis\b|\bdynamodb\b|\bcassandra\b|\bfirebase\b|\bsupabase\b|\bnosql\b", ["Software"]),
-    "APIs": (r"\brest(?:ful)?(?: apis?)?\b|\bgraphql\b|\bgrpc\b|\bapis?\b|\bmicroservices?\b", ["Software"]),
-    "Distributed Systems": (r"\bdistributed systems?\b|\bconcurren\w+\b|\bmulti-?thread\w*\b|\blow[- ]latency\b",
-                            ["Software", "Quant"]),
+    "APIs": (r"(?-i:\bREST\b)|\brestful\b|\brest apis?\b|\bgraphql\b|\bgrpc\b|\bapis?\b|\bmicroservices?\b",
+             ["Software"]),  # not "the rest of the team"
+    "Distributed Systems": (r"\bdistributed systems?\b|\bconcurrency\b|\bconcurrent (?:programming|systems?|computing)\b|"
+                            r"\bmulti-?thread\w*\b|\blow[- ]latency\b", ["Software", "Quant"]),  # not "concurrently enrolled"
     "Security": (r"\bcyber ?security\b|\bpenetration testing\b|\bowasp\b|\bsiem\b|\bnetwork security\b", ["Software"]),
-    "Embedded": (r"\bembedded\b|\bmicrocontrollers?\b|\barduino\b|\braspberry pi\b|\bstm32\b|\brtos\b|\bfreertos\b",
-                 ["Hardware"]),
-    "FPGA/ASIC": (r"\bfpga\b|\basic\b|\bvivado\b|\bquartus\b|\bcadence\b|\bsynopsys\b", ["Hardware"]),
-    "Circuits/PCB": (r"\bpcb\b|\bcircuit design\b|\baltium\b|\bkicad\b|\bspice\b|\banalog\b", ["Hardware"]),
+    # embedded systems, not "embedded in the product team"
+    "Embedded": (r"\bembedded[ /-](?:systems?|software|firmware|linux|devices?|programming|development|engineer\w*|"
+                 r"developer|hardware|controllers?|electronics|processors?|appliances?|products?|applications?|platforms?|"
+                 r"c\b|c\+\+|rust|intern\w*|co-?op)|\bmicrocontrollers?\b|\barduino\b|\braspberry pi\b|\bstm32\b|\brtos\b|"
+                 r"\bfreertos\b", ["Hardware"]),
+    "FPGA/ASIC": (r"\bfpga\b|\basic\b|\bvivado\b|\bquartus\b|(?-i:\bCadence\b)|\bsynopsys\b", ["Hardware"]),  # not a weekly cadence
+    "Circuits/PCB": (r"\bpcb\b|\bcircuit design\b|\baltium\b|\bkicad\b|\bspice\b|\banalog (?:and|&) mixed[- ]signal\b|"
+                     r"\banalog(?:/|[ -])(?:mixed[- ]signal|circuits?|design|electronics|ics?|signals?|front[- ]ends?|layout|"
+                     r"filters?)\b", ["Hardware"]),
     "CAD": (r"\bsolidworks\b|\bautocad\b|\bfusion 360\b|\bcatia\b|\bansys\b", ["Hardware"]),
     "ROS/Robotics": (r"\bros2?\b|\brobotics\b|\bslam\b|\bgazebo\b", ["Hardware", "AI/ML/Data"]),
     "Unity/Unreal": (r"\bunity\b|\bunreal\b|\bgame dev\w*\b|\bgodot\b", ["Software"]),
     "iOS/Android": (r"\bios\b|\bandroid\b|\bxcode\b|\bjetpack compose\b", ["Software"]),
-    "Figma": (r"\bfigma\b|\bsketch\b|\bwireframes?\b|\bprototyp\w+\b|\buser research\b", ["Product/Design"]),
-    "Product Sense": (r"\bproduct roadmaps?\b|\buser stories\b|\ba/b test\w*\b|\bstakeholders?\b|\bagile\b|\bscrum\b",
+    # design tools and practice: a "prototype" or a "sketch" can be anything
+    "Figma": (r"\bfigma\b|(?-i:\bSketch\b)|\bwireframes?\b|\buser research\b", ["Product/Design"]),
+    # product management phrases (stakeholders, agile and scrum are in every kind of posting)
+    "Product Sense": (r"\bproduct roadmaps?\b|\buser stories\b|\ba/b test\w*\b|\bprds?\b|\bproduct strategy\b",
                       ["Product/Design"]),
-    "Excel/VBA": (r"\bexcel\b|\bvba\b|\bfinancial model\w*\b|\bspreadsheets?\b", ["Business/Finance", "Quant"]),
-    "BI Tools": (r"\btableau\b|\bpower ?bi\b|\blooker\b|\bqlik\b", ["AI/ML/Data", "Business/Finance"]),
-    "Finance": (r"\bderivatives\b|\boptions pricing\b|\bportfolio\b|\bfixed income\b|\bequit(?:y|ies)\b|\bvaluation\b|"
-                r"\bdcf\b|\bbloomberg terminal\b|\bcfa\b", ["Business/Finance", "Quant"]),
+    "Excel/VBA": (r"\bexcel\b(?!\s+(?:in|at|as|within|under|throughout)\b)(?<!\bwill excel)(?<!['’]ll excel)|\bvba\b|"
+                  r"\bfinancial model\w*\b", ["Business/Finance", "Quant"]),  # not "you'll excel in"
+    "BI Tools": (r"\btableau\b(?! de\b)|\bpower ?bi\b|\blooker\b|\bqlik\b", ["AI/ML/Data", "Business/Finance"]),
+    # finance work, not "diversity, equity and inclusion", "salary and equity", "your portfolio" or "a $2B valuation"
+    "Finance": (r"\bderivatives\b|\boptions pricing\b|\bportfolio (?:management|managers?|construction|"
+                r"optimi[sz]ation|analytics|risk|theory)\b|\bfixed income\b|\bequity (?:research|trading|markets?|"
+                r"derivatives|capital markets)\b|\bprivate equity\b|\bequities\b|"
+                r"(?<!\d[bmk] )(?<!\d )(?<!illion )\bvaluation\b|\bdcf\b|\bbloomberg terminal\b|\bcfa\b",
+                ["Business/Finance", "Quant"]),
+    # what quant and systems roles keep asking for (each track's Market). "Develop algorithms for our robots" isn't
+    # the CS fundamentals; "our AI-powered operating system" is a product; a trading firm describing itself isn't a
+    # requirement
+    "Algorithms": (r"\bdata structures?\b|\balgorithm (?:design|analysis)\b|\b(?:design and )?analysis of algorithms\b",
+                   ["Software", "Quant"]),
+    "Competitive Programming": (r"\bcompetitive programming\b|\bcodeforces\b|\bicpc\b|\btopcoder\b|\batcoder\b|"
+                                r"\bprogramming contests?\b|\bputnam\b|\bmath(?:ematics|ematical)? olympiads?\b|"
+                                r"\beuclid (?:math )?contest\b", ["Quant", "Software"]),
+    "Operating Systems": (r"\boperating systems\b|\boperating system (?:concepts|internals|fundamentals|design|"
+                          r"principles)\b|\blinux kernel\b|\bkernel (?:development|programming|drivers?|modules?)\b|"
+                          r"\bos internals\b|\bsystems programming\b|\brtos\b", ["Software", "Hardware", "Quant"]),
+    "Networking (TCP/IP)": (r"\btcp(?:/ip)?\b|\budp\b|\bnetwork(?:ing)? protocols?\b|\bcomputer networks?\b|"
+                            r"\bsocket programming\b|\bmulticast\b", ["Software", "Quant"]),
+    "KDB+/q": (r"\bkdb\+?|\bq/kdb\b", ["Quant", "AI/ML/Data"]),
+    "Trading": (r"\border books?\b|\bmarket microstructure\b|\bhigh[- ]frequency trading\b|\bhft\b|"
+                r"\balgo(?:rithmic)? trading\b|\bexecution algorithms?\b|\bmarket[- ]making (?:strategies|models?|"
+                r"concepts)\b", ["Quant"]),
+    "Mental Math": (r"\bmental (?:math|maths|arithmetic)\b|\bbrain ?teasers?\b|\bprobability puzzles?\b|"
+                    r"\bquick (?:mental )?(?:math|arithmetic)\b|\bnumerical reasoning\b", ["Quant"]),
 }
 SKILLS = {name: (re.compile(rx, 0 if name in ("C", "R", "Go") else re.I), cats) for name, (rx, cats) in _SK.items()}
+# skills whose patterns were narrowed (October 2026: "Spring 2027", "equity", "stakeholders"... no longer count). Tags
+# stored before that are checked again by store.refresh_skills.
+NARROWED_SKILLS = {"C#", "Swift", "Ruby", "Assembly", "React", "Node.js", "Spring", "LLMs/GenAI", "Spark/Big Data",
+                   "Statistics", "AWS", "Docker/Kubernetes", "APIs", "Distributed Systems", "Embedded", "FPGA/ASIC",
+                   "Circuits/PCB", "Figma", "Product Sense", "Excel/VBA", "BI Tools", "Finance"}
 
 
 def detect_skills(text: str) -> list[str]:
@@ -292,6 +374,60 @@ NO_SPONSOR = re.compile(
 _STUDENT_VISA = re.compile(r"\b(?:CPT|OPT|STEM OPT|F-1|F1 visa)\b")  # case-sensitive on purpose ("opt in")
 
 
+# Who can't apply, only where a posting says so. Not "military" (it holds "itar", and every equal-opportunity statement has it), not
+# "U.S. Citizenship and Immigration Services" (E-Verify's small print), not "a U.S. citizen or anyone authorized to work here".
+_US = r"(?:u\.?s\.?a?\.?|united states)"
+_US_ONLY_RE = re.compile(
+    rf"\b{_US} citizen(?:ship)?\s*(?:status\s*)?(?:is\s+|are\s+|will be\s+|be\s+)?(?:strictly\s+|also\s+|absolutely\s+)?(?:required|mandatory|needed|only|a pre-?requisite)\b"
+    rf"|\b(?:requires?|requiring|requirement of|need)\s+(?:active\s+|a\s+|an\s+|to\s+have\s+|to\s+be\s+(?:a\s+)?)?{_US} citizen(?:ship)?\b"
+    rf"|\bmust\s+(?:either\s+)?(?:be|have|hold|possess)\s+(?:a\s+|an\s+)?(?:\(i\)\s*)?(?:current\s+|valid\s+)?[\"“]?{_US} (?:citizen(?:ship|s)?|persons?)\b"
+    rf"|\bonly\s+{_US} (?:citizens?|persons?)\b|\bopen to {_US} citizens\b|\bonly to applicants who qualify as [\"“]?{_US} persons?\b"
+    rf"|\bstatus of a {_US} person\b|\b{_US} citizen(?:ship|s)?,? or (?:{_US} )?(?:lawful )?(?:permanent|green)"
+    r"|\bsecurity clearance\b|\b(?:top )?secret clearance\b|\bts/sci\b|(?-i:\bITAR\b)", re.I)
+_WORK_ALTERNATIVE_RE = re.compile(
+    r"\bor\b[^.;\n]{0,160}\b(?:otherwise\s+)?(?:legally?\s+)?(?:authori[sz]ed to work|right to work|"
+    r"alien authori[sz]ed|alien lawfully)", re.I)
+
+
+def us_only(text: str) -> bool:
+    """Read exceptions in the restriction's clause, never elsewhere in the posting."""
+    text = re.sub(r"\bu\.s\.(?:a\.)?", "US", text, flags=re.I)
+    for clause in re.split(r"[;.!?\n]+", text):
+        for m in _US_ONLY_RE.finditer(clause):
+            before, after = clause[:m.start()], clause[m.end():]
+            # A direct negation of this requirement, not a separate sentence about sponsorship.
+            if re.search(r"\b(?:does not|do not|will not|not|no)\s*$", before, re.I):
+                continue
+            if re.match(r"\s+(?:(?:is|are)\s+)?not\s+(?:required|needed|necessary)\b", after, re.I):
+                continue
+            if "clearance" in m.group().lower() or "ts/sci" in m.group().lower():
+                if (re.search(r"\b(?:Canadian|Canada|UK|United Kingdom|BPSS|NATO|reliability)\s*$", before, re.I)
+                        or re.match(r"\s*(?:\(Reliability Status\)|(?:from|in|for) (?:Canada|the UK|the United Kingdom)\b)", after, re.I)):
+                    continue
+            elif _WORK_ALTERNATIVE_RE.search(after):
+                continue
+            return True
+    return False
+
+
+_DEGREE_OPEN_RE = re.compile(r"\b(bs|b\.s\.|ba|bsc|bachelor'?s?|undergrad\w*)\b", re.I)
+# "Intern, MS - Summer 2027", "Intern - MS", "MS/PhD": the degree, not a state ("Hattiesburg, MS") or "MS Office"
+_MS_RE = re.compile(r"\b(?:[Ii]ntern(?:ship)?|[Cc]o-?op|[Ee]ngineer|[Ss]cientist|[Rr]esearcher|[Aa]nalyst)\s*[,(-]\s*MS\b|\s-\s+MS\b|\bMS\s*(?:/|,|or)\s*Ph\.?D")
+_PHD_RE = re.compile(r"\bph\.?d\b|\bdoctoral\b|\bpost-?doc\w*\b", re.I)
+_MASTERS_RE = re.compile(r"\b(master'?s|msc|m\.s\.|mba)\b|\bgraduate (?:intern|student|research)\b", re.I)
+_DEGREE_ANY_RE = re.compile(r"MS\b|(?i:ph\.?d|doctoral|post-?doc|master|msc|m\.s\.|mba|graduate )")  # most titles: one look
+DEGREE_FLAGS = {"phd", "masters"}
+
+
+def degree_flags(title: str) -> list[str]:
+    """Which degree the title itself asks for. "BS/MS" is open to undergrads; "MS/PhD" is open to a master's student."""
+    if not _DEGREE_ANY_RE.search(title) or _DEGREE_OPEN_RE.search(title):
+        return []
+    if _MS_RE.search(title) or _MASTERS_RE.search(title):
+        return ["masters"]
+    return ["phd"] if _PHD_RE.search(title) else []
+
+
 def detect_flags(title: str, description: str = "", sponsorship: str = "") -> list[str]:
     flags = []
     t = f"{title} {description[:6000]}"
@@ -305,12 +441,8 @@ def detect_flags(title: str, description: str = "", sponsorship: str = "") -> li
         flags.append("sponsor_yes")
     if no:
         flags.append("no_sponsor")
-    if re.search(r"\bph\.?d\b|\bdoctoral\b", title, re.I):
-        flags.append("phd")
-    if re.search(r"\b(master'?s|msc|m\.s\.|mba)\b", title, re.I):
-        flags.append("masters")
-    if re.search(r"u\.?s\.? citizen(ship)?|security clearance|must be a us person|itar", t, re.I) or \
-            "Citizenship" in (sponsorship or ""):
+    flags += degree_flags(title)
+    if us_only(t) or "Citizenship" in (sponsorship or ""):
         flags.append("us_citizen")
     if re.search(r"\bnew grad|graduate program|full[- ]time\b", title, re.I):
         flags.append("not_intern")
@@ -475,3 +607,17 @@ def same_req(a: str, b: str) -> bool:
         return True
     da, db_ = re.sub(r"[a-z]", "", ka), re.sub(r"[a-z]", "", kb)  # "Job ID 181145" vs "R-0000181145"
     return len(da) >= 5 and da == db_ and (ka.isdigit() or kb.isdigit())
+
+
+def when_text(ts: float, with_time: bool = True) -> str:
+    """"Mon Oct 14, 2:30 PM" on every computer (strftime's %-I / %-d only exist on Mac and Linux)."""
+    d = datetime.fromtimestamp(ts)
+    day = d.strftime("%a %b %d")
+    if not with_time:
+        return day
+    return f"{day}, {d.hour % 12 or 12}:{d.minute:02d} {'AM' if d.hour < 12 else 'PM'}"
+
+
+def long_date(d) -> str:
+    """"October 14, 2026" without a leading zero, on every computer."""
+    return f"{d.strftime('%B')} {d.day}, {d.year}"

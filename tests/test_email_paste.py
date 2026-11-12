@@ -16,7 +16,9 @@ TMP = tempfile.mkdtemp(prefix="coopcoach-paste-")
 os.environ.update(COOPCOACH_DATA=TMP, GROQ_API_KEY="", ANTHROPIC_API_KEY="", COOPCOACH_CLAUDE_BIN="/nonexistent",
                   COOPCOACH_CODEX_BIN="/nonexistent")
 
-from coopcoach import agent, db, mail, store  # noqa: E402
+from coopcoach import agent, db, jobdetail, mail, store  # noqa: E402
+
+jobdetail.ensure_description = lambda *a, **k: ""  # offline: a prep sheet doesn't wait on the posting's web page
 
 INVITE = """Hi Alex,
 

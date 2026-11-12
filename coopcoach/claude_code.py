@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 import uuid
+from functools import lru_cache
 from pathlib import Path
 
 from . import auth, config
@@ -84,10 +85,67 @@ def _check_limit(msg: str) -> None:
         _status["t"] = 0
 
 
-def status(refresh: bool = False) -> dict:
-    """Is Claude Code installed and signed in? Cached for two minutes (it's two quick subprocess calls)."""
-    if not refresh and _status["v"] and time.time() - _status["t"] < 120:
-        return _status["v"]
+# How long a status answer is reused. "Signed in" rarely changes; "not signed in" goes stale fast, so signing in
+# shows up within seconds rather than minutes.
+FRESH_SIGNED_IN = 120
+FRESH_SIGNED_OUT = 5
+SIGNIN_POLL = 1.0    # after opening Terminal on a sign-in: re-check this often...
+SIGNIN_WATCH = 180   # ...for up to this long
+
+
+def fresh(cache: dict) -> bool:
+    v = cache["v"]
+    return bool(v) and time.time() - cache["t"] < (FRESH_SIGNED_IN if v.get("logged_in") else FRESH_SIGNED_OUT)
+
+
+def checked(cache: dict, lock: threading.Lock, check) -> dict:
+    """Run `check()` and keep its answer, one check at a time: a caller that waited while another check ran takes
+    that answer instead of starting its own."""
+    asked = time.time()
+    with lock:
+        if cache["v"] and cache["t"] >= asked:
+            return cache["v"]
+        started = time.time()  # a check counts from when it started: one already running when you asked isn't fresh
+        v = check()
+        cache.update(t=started, v=v)
+        return v
+
+
+def in_background(cache: dict, lock: threading.Lock, refresh) -> None:
+    """For /api/state, which must never wait on a subprocess: refresh a stale answer on a thread."""
+    if (not cache["v"] or time.time() - cache["t"] > FRESH_SIGNED_IN) and not lock.locked():
+        threading.Thread(target=refresh, kwargs={"refresh": True}, daemon=True).start()
+
+
+_watch_lock = threading.Lock()
+_watch_until: dict[str, float] = {}
+
+
+def watch_sign_in(name: str, check) -> None:
+    """Sign-in happens in Terminal and the browser, out of the app's sight: re-check every couple of seconds until
+    it's done (or a few minutes pass), so the cached status flips to signed in as soon as it is."""
+    with _watch_lock:
+        running = _watch_until.get(name, 0) > 0
+        _watch_until[name] = time.time() + SIGNIN_WATCH
+        if running:
+            return
+
+    def run():
+        while True:
+            time.sleep(SIGNIN_POLL)
+            try:
+                done = check(refresh=True).get("logged_in")
+            except Exception as e:
+                log.info("%s sign-in check failed: %s", name, e)
+                done = False
+            with _watch_lock:
+                if done or time.time() > _watch_until.get(name, 0):
+                    _watch_until[name] = 0
+                    return
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _check() -> dict:
     b = binary()
     v = {"installed": bool(b), "logged_in": False, "version": "", "method": "", "path": b or ""}
     if b:
@@ -104,33 +162,48 @@ def status(refresh: bool = False) -> dict:
         except Exception as e:  # an old version without `auth status`, a hung keychain prompt...
             log.info("claude status check failed: %s", e)
     v["paused_minutes"] = int(paused() / 60) + 1 if paused() else 0
-    _status.update(t=time.time(), v=v)
     return v
 
 
+_checking = threading.Lock()
+
+
+def status(refresh: bool = False) -> dict:
+    """Is Claude Code installed and signed in? Two quick subprocess calls; signed in is reused for two minutes, not
+    signed in for a few seconds."""
+    if not refresh and fresh(_status):
+        return _status["v"]
+    return checked(_status, _checking, _check)
+
+
 def status_cached() -> dict:
-    """Never blocks: the last known status, refreshed in the background when it's stale (for /api/state)."""
-    v = _status["v"]
-    if not v or time.time() - _status["t"] > 120:
-        if not _refreshing.locked():
-            def refresh():
-                with _refreshing:
-                    status(refresh=True)
-            threading.Thread(target=refresh, daemon=True).start()
-    return v or {"installed": bool(binary()), "logged_in": False, "version": "", "checking": True}
+    """Never blocks: the last known status (an explicit check updates it at once), refreshed in the background
+    when it's old (for /api/state)."""
+    in_background(_status, _checking, status)
+    return _status["v"] or {"installed": bool(binary()), "logged_in": False, "version": "", "checking": True}
 
 
-_refreshing = threading.Lock()
+def usable(wait: bool = True) -> bool:
+    """`wait=False` answers from the last check without running one (for requests that must stay quick)."""
+    s = status() if wait else status_cached()
+    return bool(s.get("installed") and s.get("logged_in")) and not paused()
 
 
-def usable() -> bool:
-    s = status()
-    return s["installed"] and s["logged_in"] and not paused()
+@lru_cache(maxsize=1)
+def _model_list() -> dict:
+    return config.read_yaml((config.PKG / "ai_models.yaml").read_text(encoding="utf-8")) or {}
 
 
-def _model(kind: str) -> list[str]:
-    m = config.get("ai.claude_code_fast_model" if kind == "fast" else "ai.claude_code_model", "sonnet" if kind == "fast" else "")
-    return ["--model", str(m)] if m else []
+def model_for(job: str) -> str:
+    """Which model does this job: ai_models.yaml, unless Settings say otherwise."""
+    jobs = _model_list().get("jobs") or {}
+    job = {"fast": "scoring", "main": "default"}.get(job, job)
+    return str(config.get(f"ai.models.{job}", "") or jobs.get(job) or jobs.get("default") or "")
+
+
+def _model(job: str) -> list[str]:
+    m = model_for(job)
+    return ["--model", m] if m else []
 
 
 _LEAN = ["--tools", "", "--strict-mcp-config", "--setting-sources", "project", "--disable-slash-commands",
@@ -168,6 +241,26 @@ def _raise_if_error(d: dict, stderr: str = "") -> None:
         raise RuntimeError(f"Claude Code: {msg[:240]}")
 
 
+_WINDOWS = os.name == "nt"
+
+
+def _write_private(path: Path, text: str) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _system_args(text: str) -> tuple[list[str], Path | None]:
+    """The system prompt as command-line arguments. On Windows, Claude Code is often a .cmd launcher (npm's
+    claude.cmd), and a .cmd file cuts an argument at its first line break, which would also drop every argument
+    after it (the tool limits among them). There it goes in a private file instead."""
+    if not _WINDOWS:
+        return ["--system-prompt", text], None
+    f = _workdir() / f"system-{uuid.uuid4().hex[:10]}.txt"
+    _write_private(f, text)
+    return ["--system-prompt-file", str(f)], f
+
+
 def _run(args: list[str], prompt: str, timeout: int) -> dict:
     if not binary():
         raise Unavailable("Claude Code isn't installed")
@@ -199,7 +292,7 @@ def _parse_json_text(text: str):
 
 
 def call_json(system: str, text: str, schema: dict, effort: str = "medium", fast: bool = False,
-              timeout: int = 300, web: bool = False) -> dict:
+              timeout: int = 300, web: bool = False, job: str = "") -> dict:
     """One structured answer, validated against `schema`. Contact details are redacted and put back. `web` lets it
     search and read the web first (and nothing else)."""
     red = Redactor()
@@ -207,10 +300,15 @@ def call_json(system: str, text: str, schema: dict, effort: str = "medium", fast
     if web:
         lean[lean.index("--tools") + 1] = "WebSearch,WebFetch"
         lean += ["--allowedTools", "WebSearch", "WebFetch", "--permission-mode", "dontAsk"]
+    sys_args, sys_file = _system_args(red.redact(system))
     args = [binary() or "claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema),
-            "--system-prompt", red.redact(system), "--effort", {"max": "high", "xhigh": "high"}.get(effort, effort),
-            *lean, *_model("fast" if fast else "main")]
-    d = _run(args, red.redact(text), timeout)
+            *sys_args, "--effort", {"max": "high", "xhigh": "high"}.get(effort, effort),
+            *lean, *_model(job or ("fast" if fast else "main"))]
+    try:
+        d = _run(args, red.redact(text), timeout)
+    finally:
+        if sys_file:
+            sys_file.unlink(missing_ok=True)
     out = d.get("structured_output")
     if out is None:
         out = _parse_json_text(d.get("result") or "")
@@ -220,9 +318,14 @@ def call_json(system: str, text: str, schema: dict, effort: str = "medium", fast
 def chat(system: str, history: list[dict], timeout: int = 180) -> str:
     red = Redactor()
     convo = "\n\n".join(f"{'Student' if m['role'] == 'user' else 'You'}: {m['content']}" for m in history[-10:])
-    args = [binary() or "claude", "-p", "--output-format", "json", "--system-prompt", red.redact(system),
-            "--effort", "low", *_LEAN, *_model("main")]
-    d = _run(args, red.redact(convo + "\n\nReply to the student's last message."), timeout)
+    sys_args, sys_file = _system_args(red.redact(system))
+    args = [binary() or "claude", "-p", "--output-format", "json", *sys_args, "--effort", "low", *_LEAN,
+            *_model("main")]
+    try:
+        d = _run(args, red.redact(convo + "\n\nReply to the student's last message."), timeout)
+    finally:
+        if sys_file:
+            sys_file.unlink(missing_ok=True)
     return red.restore(d.get("result") or "").strip()
 
 
@@ -234,6 +337,18 @@ def mcp_config(pid: int, ticket: str, run_id: str = "", source: str = "claude_co
     ticket rides in the config, which only exists for the length of the run."""
     env = {"COOPCOACH_DATA": str(config.DATA_DIR), "COOPCOACH_SOURCE": source, "COOPCOACH_RUN_ID": run_id,
            "PYTHONPATH": str(config.ROOT)}
+    port = os.environ.get("COOPCOACH_PORT")  # set while the app is serving
+    if port and not ticket_ref:  # a run while the app is open: the app answers the tools (everything's loaded)
+        from . import agent, auth, mcp_server
+        names = [n for n in agent.TOOLS if not tools or n in tools]
+        auth.allow_tools(ticket, names)
+        spec = _workdir() / f"tools-{run_id or uuid.uuid4().hex[:12]}.json"
+        _write_private(spec, json.dumps({"instructions": mcp_server.INSTRUCTIONS, "tools": [
+            {"name": n, "description": agent.TOOLS[n][1], "schema": agent.TOOLS[n][2], "read_only": n not in agent.WRITES}
+            for n in names]}))
+        env.update(COOPCOACH_TICKET=ticket, COOPCOACH_TOOLS_FILE=str(spec), COOPCOACH_API=f"http://127.0.0.1:{port}")
+        return {"mcpServers": {SERVER: {"type": "stdio", "command": sys.executable, "args": ["-m", "coopcoach.mcp_proxy"],
+                                        "env": env}}}
     env.update({"COOPCOACH_TICKET_REF": ticket_ref} if ticket_ref else {"COOPCOACH_TICKET": ticket})
     if tools:
         env["COOPCOACH_TOOLS"] = ",".join(tools)
@@ -241,14 +356,10 @@ def mcp_config(pid: int, ticket: str, run_id: str = "", source: str = "claude_co
                                     "args": ["-m", "coopcoach", "mcp", "--profile", str(pid)], "env": env}}}
 
 
-def _write_private(path: Path, text: str) -> None:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
 
 
 def run_agent(pid: int, prompt: str, system: str, source: str = "claude_code", tools: list[str] | None = None,
-              timeout: int = 600, on_step=None) -> dict:
+              timeout: int = 600, on_step=None, model: str = "main") -> dict:
     """Claude Code works through Co-op Coach's tools until it's done. Returns its reply and the run id (the
     Activity log has what it changed)."""
     if not usable():
@@ -261,10 +372,11 @@ def run_agent(pid: int, prompt: str, system: str, source: str = "claude_code", t
     cfg = _workdir() / f"mcp-{run_id}.json"
     _write_private(cfg, json.dumps(mcp_config(pid, ticket, run_id, source, tools)))
     red = Redactor()
+    sys_args, sys_file = _system_args(red.redact(system))
     args = [binary(), "-p", "--output-format", "stream-json", "--verbose", "--mcp-config", str(cfg),
             "--strict-mcp-config", "--tools", "", "--allowedTools", f"mcp__{SERVER}", "--permission-mode", "dontAsk",
             "--setting-sources", "project", "--disable-slash-commands", "--no-session-persistence",
-            "--system-prompt", red.redact(system), *_model("main")]
+            *sys_args, *_model(model)]
     steps, final, err = [], None, []
     try:
         proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -292,6 +404,9 @@ def run_agent(pid: int, prompt: str, system: str, source: str = "claude_code", t
         killer.cancel()
     finally:
         cfg.unlink(missing_ok=True)
+        (_workdir() / f"tools-{run_id}.json").unlink(missing_ok=True)
+        if sys_file:
+            sys_file.unlink(missing_ok=True)
         auth.revoke_ticket(ticket)
     if not final:
         tail = "".join(err).strip()[-300:]
@@ -345,5 +460,10 @@ def sign_in_in_terminal() -> None:
     if not b or sys.platform != "darwin":
         raise Unavailable("Run `claude auth login` in a terminal")
     script = f'tell application "Terminal"\nactivate\ndo script {json.dumps(shlex.quote(b) + " auth login")}\nend tell'
-    subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=20)
+    _osascript(script)
     _status["t"] = 0
+    watch_sign_in("claude", status)
+
+
+def _osascript(script: str) -> None:
+    subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=20)

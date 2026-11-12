@@ -7,18 +7,23 @@ import platform
 import shutil
 import smtplib
 import subprocess
-from datetime import datetime
 from email.message import EmailMessage
 
 import httpx
 
 from . import config
+from .textutil import when_text
 
 log = logging.getLogger(__name__)
 
 
+def _mark(j: dict) -> str:
+    """⭐ a favourite, 🎯 a role in a track they follow."""
+    return "⭐ " if j.get("favourite") else "🎯 " if j.get("niche_hit") else ""
+
+
 def _fmt_job(j: dict) -> str:
-    star = "⭐ " if j.get("favourite") else ""
+    star = _mark(j)
     loc = ", ".join((j.get("locations") or [])[:2])
     return f"{star}{j['company']} · {j['title']} ({j['score']}%)" + (f" · {loc}" if loc else "")
 
@@ -34,8 +39,11 @@ def _fmt_update(u: dict) -> str:
 
 
 def _fmt_event(e: dict) -> str:
-    when = datetime.fromtimestamp(e["start_ts"]).strftime("%a %b %d, %-I:%M %p")
+    when = when_text(e["start_ts"])
     return f"{e['title']} · {when}"
+
+
+DISCORD_ROOM = 5800
 
 
 def discord(webhook: str, title: str, jobs: list[dict], events: list[dict], updates: list[dict] = ()) -> None:
@@ -45,11 +53,11 @@ def discord(webhook: str, title: str, jobs: list[dict], events: list[dict], upda
                        "description": "\n".join(_fmt_update(u) for u in updates[:10])[:3500], "color": 0x7C3AED})
     for j in jobs[:9 - bool(updates)]:
         embeds.append({
-            "title": f"{'⭐ ' if j.get('favourite') else ''}{j['company']}: {j['title']}"[:256],
+            "title": f"{_mark(j)}{j['company']}: {j['title']}"[:256],
             "url": j["url"],
             "description": (f"**{j['score']}% match** · " + ", ".join((j.get("locations") or [])[:2])
                             + (f"\n{j['why']}" if j.get("why") else ""))[:1000],
-            "color": 0xF5B301 if j.get("favourite") else 0x4F7DF3,
+            "color": 0xF5B301 if _mark(j) else 0x4F7DF3,
         })
     if events:
         embeds.append({
@@ -58,8 +66,16 @@ def discord(webhook: str, title: str, jobs: list[dict], events: list[dict], upda
                                      for e in events[:8])[:3500],
             "color": 0x22A06B,
         })
-    r = httpx.post(webhook, json={"username": "Co-op Coach", "content": f"**{title}**", "embeds": embeds[:10]},
-                   timeout=20)
+    # Discord refuses a whole message over 6,000 characters of embeds: what comes first is what matters most
+    room, kept = DISCORD_ROOM, []
+    for e in embeds[:10]:
+        room -= len(e["title"])
+        if room < 80:
+            break
+        e["description"] = e["description"][:room]
+        room -= len(e["description"])
+        kept.append(e)
+    r = httpx.post(webhook, json={"username": "Co-op Coach", "content": f"**{title}**"[:1900], "embeds": kept}, timeout=20)
     r.raise_for_status()
 
 
@@ -69,7 +85,7 @@ def ntfy(topic: str, title: str, jobs: list[dict], events: list[dict], updates: 
     lines = [_fmt_update(u) for u in updates[:5]] + [_fmt_job(j) for j in jobs[:8]] + \
         [f"📅 {_fmt_event(e)}" for e in events[:4]]
     payload = {"topic": topic, "title": title, "message": "\n".join(lines), "tags": ["briefcase"],
-               "priority": 4 if updates or any(j.get("favourite") for j in jobs) else 3}
+               "priority": 4 if updates or any(_mark(j) for j in jobs) else 3}
     click = jobs[0]["url"] if jobs else (events[0].get("url") if events else "")
     if click:
         payload["click"] = click
@@ -105,7 +121,7 @@ def email(to: str, title: str, jobs: list[dict], events: list[dict], updates: li
     msg.set_content(text + "\n\n— Co-op Coach")
     h = html.escape
     rows = "".join(
-        f"<tr><td style='padding:6px 0'><b>{'⭐ ' if j.get('favourite') else ''}{h(j['company'])}</b><br>"
+        f"<tr><td style='padding:6px 0'><b>{_mark(j)}{h(j['company'])}</b><br>"
         f"<a href='{h(j['url'], quote=True)}'>{h(j['title'])}</a><br><small>{j['score']}% match · "
         f"{h(', '.join((j.get('locations') or [])[:2]))}</small></td></tr>" for j in jobs)
     ev_items = []
@@ -137,6 +153,9 @@ def send(profile_name: str, notify_prefs: dict, jobs: list[dict], events: list[d
         parts.append(f"{len(jobs)} new match{'es' if len(jobs) != 1 else ''}")
     if fav:
         parts.append(f"{fav} from favourites")
+    in_niches = sum(1 for j in jobs if j.get("niche_hit") and not j.get("favourite"))
+    if in_niches:
+        parts.append(f"{in_niches} from tracks you follow")
     if events:
         parts.append(f"{len(events)} new event{'s' if len(events) != 1 else ''}")
     title = title or f"Co-op Coach · {profile_name}: " + ", ".join(parts)
