@@ -52,7 +52,7 @@ get ready for it.
 <td align="center" width="25%"><h3>27,000+</h3><sub>live postings in the shared feed, crawled 3× a day</sub></td>
 <td align="center" width="25%"><h3>4,700+</h3><sub>company career sites read directly</sub></td>
 <td align="center" width="25%"><h3>65</h3><sub>tools shared by the app, Jarvis, Claude Code and Chrome</sub></td>
-<td align="center" width="25%"><h3>0</h3><sub>applications ever submitted without you</sub></td>
+<td align="center" width="25%"><h3>1,719</h3><sub>automated checks across 64 test suites</sub></td>
 </tr>
 </table>
 
@@ -137,169 +137,36 @@ flowchart LR
   TOOLS --> FILL["Playwright: fill forms<br/>stops before Submit"]
 ```
 
-* **One set of tools, many drivers.** Everything the app can do (search, prepare, track, research, remind...) is a
-  tool in `coopcoach/tools/`. The chat, Autopilot, chat-card buttons, and your own Claude Code or ChatGPT (through
-  the MCP server and plugin) all call the same tools. Every call is logged with how to undo it.
-* **Your own AI, no API key.** If the `claude` or Codex CLI is signed in, Co-op Coach runs it headless with only its
-  own tools (no shell, no files) and gets JSON back. Groq is the free fallback. Contact details are replaced with
-  placeholders before anything leaves your Mac.
-* **Two databases, one API.** SQLite by default. Optionally your own Supabase project: a small translation layer
-  (placeholders, `INSERT OR IGNORE` → `ON CONFLICT`, `LIKE` → `ILIKE`...) runs the same queries on Postgres. After a
-  sync only changed postings are downloaded (md5 fingerprints), which keeps it inside the free plan.
-* **Thousands of boards nobody added by hand.** About once a month, Co-op Coach reads Common Crawl's public index of
-  the web for every Greenhouse, Ashby and Lever board it links to, plus SimplifyJobs' application links, checks each
-  one live, and adds the real ones. Every YC company that says it's hiring has its jobs page read (what Work at a
-  Startup lists, minus the sign-in).
-* **One crawler for everyone, a pull in seconds.** A crawler (the ordinary sync, run by GitHub Actions against a
-  Supabase schema with nobody's data in it) reads every board at 7:30, 12:30 and 17:30 Eastern, when companies post,
-  with quick checks of the boards that just posted in between. Each posting records when it last changed and whether
-  it's a real new opening (not a board's backlog), so each app pulls only what changed: inside the database when the
-  app is in the same Supabase project, over Supabase's REST API otherwise. Scores, applications and resumes stay in
-  each person's own database; boards someone added that the feed doesn't read are still read by their app, and if
-  the crawler ever stops for half a day, every app goes back to reading every board itself. Setup is in
-  `coopcoach/central.py` (`setup_sql`, `seed_sql`; `publish_sql` opens it to other people's apps, read-only).
-* **A full sync in under a minute, a quick check in seconds.** Company boards are read by a few worker processes
-  (one Python process spends more time on its own threads than on the network), and what's read is saved every 15
-  seconds. A posting the board sends exactly as last time is neither re-read nor re-sent. Workday boards are read
-  through their own internship filter where it proves complete (one request instead of six, and it finds internships
-  the keyword search misses), plus only the searches a board needs, with a full read every day or two. Between full
-  syncs, a quick check every 20 minutes reads the boards that matter to you (niches you follow, companies you starred
-  or applied to, the boards behind your best matches, boards that just posted), one page each: Workday lists the
-  newest first. AI scoring and alerts finish after the sync shows as done; each report times every step.
-* **A calendar link that works when your Mac is off.** A Supabase Edge Function serves your saved events,
-  interview times, assessment deadlines and reminders as an `.ics` feed. Only a hash of the link is stored.
+* **One set of tools, many drivers.** The app, Jarvis, Autopilot, Claude Code (MCP + plugin) and the Chrome extension all call the same 65 tools in `coopcoach/tools/`. Every call is logged with an Undo.
+* **One crawler for everyone.** GitHub Actions reads every board three times a day into a shared Supabase feed; each app pulls only what changed, in seconds.
+* **Your own AI, no API key.** A signed-in Claude Code or Codex runs headless with only Co-op Coach's tools. Groq is the free fallback. Contact details are redacted first.
 
 ## Principles
 
-* **You submit.** Forms get filled; the Submit button is yours. A hook in the Claude Code plugin blocks it too.
-* **No CAPTCHA solving, no account creation, no demographic answers.** When a site asks, you get a "Sign in
-  yourself" button.
-* **Never invent facts.** Letters, answers and rewrites use only your resume and the posting; anything only you
-  know becomes a `[blank]`.
-* **Secrets stay in the Keychain.** Inbox passwords, AI connections and the database password never
-  touch the database.
-* **Undo everything.** Every AI action is in the Activity log with an Undo.
+* **You press Submit.** Forms get filled; a hook in the Claude Code plugin blocks Submit too.
+* **No CAPTCHAs, no account creation, no invented facts.** Anything only you know becomes a `[blank]`.
+* **Your data stays yours.** Everything lives on your Mac (or your own Supabase); secrets stay in the Keychain.
 
 ## Engineering
 
-* **Tests:** 64 suites, 1,700+ checks, each suite in its own process with its own temporary data folder:
-  `.venv/bin/python -m tests.run_all`. Fakes stand in for the Claude Code and Codex CLIs, Groq, a Workday site (with a
-  CAPTCHA and a honeypot field) and the university calendar APIs, so the suites run offline.
-* **CI:** GitHub Actions runs ruff (pyflakes + import order) and every suite on each push.
-* **Source checks:** `tools/discover_boards.py` re-mines career boards and keeps only ones that answer live;
-  `tools/discover_event_sources.py --check` reads every university calendar and opens every hackathon site.
-* **Proof it works:** `tools/walkthrough.py` does each feature's try-it step in a real browser on a copy of the demo; `tools/audit_ui.py` presses each different safe button on every page, and in the windows they open, at desktop, phone and light; `tools/plugin_e2e.py` runs the plugin's commands in real Claude Code; `tools/live_forms.py` tries the form filler on real application pages with all sending blocked; `tools/feed_check.py` checks every track's numbers on the live feed; `tools/bench.py` and `tools/bench_ui.py` time every page.
-* **The film:** `tools/record_film.py` films the real app on the demo student (slow-motion capture, so every frame is smooth) and `tools/cut_film.py` cuts it with an original score.
+* **1,719 checks in 64 suites**, each in its own process, with fakes for Claude Code, Codex, Groq, Workday and the university calendars, so they run offline. CI runs ruff and every suite on each push.
+* **Real-browser proof:** `tools/walkthrough.py` clicks through every feature, `tools/audit_ui.py` presses every safe button at desktop and phone sizes, and `tools/live_forms.py` tests the form filler on real pages with sending blocked.
+* **The film** is the real app, recorded by `tools/record_film.py` and cut by `tools/cut_film.py`.
 
-```
-coopcoach/
-  server.py, routes_*.py   FastAPI app and routes
-  tools/                   the tools (jobs, applications, calendar, profile)
-  agent.py                 tool registry, logging + Undo, the chat loop
-  autopilot.py             daily picks, preparation, brief, follow-ups, alerts
-  matching.py, store.py    scoring, eligibility, postings cache
-  tracks.py, tracks.yaml   tracks: kinds of role and of employer, pins, follows, each track's page
-  track_discovery.py       new kinds of role found in the feed (Forward Deployed, GTM...)
-  market.py, niches.py     a market's skills, pay and fit; the firm lists behind employer tracks (niches.yaml)
-  path.py, leetcode.py     the Path: XP, streaks, levels, milestones, tests, the NeetCode 150 (coding.yaml); a linked public LeetCode profile
-  meetings.py              interviews, assessments and coffee chats found in email, for the calendar
-  hackathons.py, github.py hackathon applications; Devpost write-ups from a public GitHub repo
-  startups.py, discover.py the Startups in Canada track; finding new career boards (Common Crawl, SimplifyJobs)
-  workday_apply.py         filling Workday's multi-page applications (stops before Submit)
-  export.py                the Excel workbook
-  contacts.py              People: recruiters, LinkedIn connections, startup signals, funding
-  sources/, sync.py        career-site readers and the sync
-  central.py               the shared job feed: what each app pulls, the crawler's schema (crawl.yml runs it)
-  events.py                event readers (Localist, LiveWhale, Tribe, iCal, Luma, MLH...), regions, hackathons
-  mail.py, mail_rules.py   inbox connections; reading recruiting email
-  outlook_web.py           Outlook on the web, signed in in Co-op Coach's own window
-  resume*.py               resume parsing, Studio, checker, compare, PDF/Word/LaTeX
-  claude_code.py, codex_cli.py, ai.py, groq_client.py   AI engines
-  mcp_server.py            Co-op Coach as an MCP server
-  db.py, supa.py           SQLite / Postgres, Supabase setup
-supabase/functions/calendar   the calendar link
-claude-plugin/              skills + Submit guard for Claude Code (and Codex)
-tests/, tools/              suites and maintenance scripts
-```
-
-## Using it for real
-
-
-You need a Mac with Python 3.10+ (`brew install python@3.12`), Google Chrome and git.
+## Run it for real
 
 ```bash
-./run.sh            # first run sets everything up, then http://127.0.0.1:8765
+./run.sh    # sets everything up, then http://127.0.0.1:8765
 ```
 
-Add yourself, set a passcode, upload your resume in Settings → Profile, and say what you're looking for. A friend can
-have their own profile (and passcode) on the same Mac, or run their own copy.
+Needs a Mac with Python 3.10+, Chrome and git. Inbox, AI engines, Supabase, alerts and privacy details are in
+[docs/SETUP.md](docs/SETUP.md).
 
-<details><summary><b>AI: your Claude Code, ChatGPT, or free Groq</b></summary>
+## Credits
 
-Everything works without AI. Settings → AI picks the engine:
-* **Claude Code** or **ChatGPT (Codex)**: if the CLI is installed and signed in, your plan does all the AI work, with
-  no API key. *Connect* also installs the Co-op Coach plugin, so in Claude Code you can type `/coop-coach:autopilot`,
-  `/coop-coach:apply Shopify`, `/coop-coach:match quant`, `/coop-coach:interview-prep RBC`... (in Codex: `$autopilot`, or just ask).
-* **Groq (free)**: get a key at <https://console.groq.com/keys> and set `GROQ_API_KEY=` in `.env`.
-</details>
-
-<details><summary><b>Inbox: Gmail, Outlook, iCloud, any IMAP</b></summary>
-
-Settings → Inbox → *Connect an inbox* and type your address; the steps for your provider appear. Tip: use
-a separate email just for applications. Gmail, Yahoo and iCloud use an app password. Outlook, Hotmail and school
-Microsoft 365: press *Sign in to Outlook* and sign in in the window that opens, as you would in a browser (Duo included).
-It needs no IT approval and no app registration. The window reads your first emails and closes by itself; after that it
-reads only what Outlook's own search finds for recruiting words, and *Sign in again* is there when your school ends the
-session (Co-op Coach never sees your password, and keeps the sign-in in that window's own profile). If you'd rather use Microsoft's API, register an app once:
-1. <https://entra.microsoft.com> → App registrations → New registration ("Accounts in any organizational directory
-   and personal Microsoft accounts", no redirect URI).
-2. Authentication → *Allow public client flows: Yes*. API permissions → Microsoft Graph → Delegated → `Mail.Read`.
-3. Paste the Application (client) ID in the app (it isn't a secret), then sign in with the code it shows.
-
-The first scan reads the last 120 days. Statuses only move forward; fix any email from *Inbox activity*. No inbox?
-Paste an email into the chat or Applications.
-</details>
-
-
-
-<details><summary><b>Your data in Supabase, and the calendar link</b></summary>
-
-1. Create a free project, then make the app's database login. The password is generated on your Mac and goes
-   straight to the Keychain; the project only gets a one-way hash:
-   `.venv/bin/python -c "from coopcoach import supa; print(supa.setup_sql(supa.new_credentials('<project ref>')))"`
-   and run the printed SQL in the project's SQL editor.
-2. `.venv/bin/python -m coopcoach supabase --connect <project ref> --region <region> --move` copies every table
-   (checking counts) and switches. `--local` switches back; the local file is kept as a backup.
-3. Deploy `supabase/functions/calendar` (with JWT verification off; the long random token in the URL is the key).
-
-Tables live in a private `coopcoach` schema the public API can't reach.
-</details>
-
-<details><summary><b>Alerts, passcodes, background syncs</b></summary>
-
-* **Alerts:** phone push with [ntfy](https://ntfy.sh) (a hard-to-guess topic), a Discord webhook, or email (SMTP in
-  `.env`). Mac banners are always on.
-* **Passcodes** are salted PBKDF2 hashes; the app auto-locks after 30 idle minutes. Forgot it? On this Mac:
-  `.venv/bin/python -m coopcoach reset-passcode "Your Name"`. It's a lock, not disk encryption.
-* **Syncing while the app is closed:** `0 */3 * * * cd /path/to/coop-coach && .venv/bin/python -m coopcoach sync`
-  in `crontab -e`.
-</details>
-
-## Privacy
-
-Your data stays in `data/` on your Mac (or your own Supabase project), including the recruiters you hear from.
-Passwords and sign-in tokens are in the macOS Keychain; your private calendar link's token is in the database, like the
-link itself. Nothing is sent anywhere except requests to job and event sites, the Workday sites you saved logins for,
-your alert channels, and the AI you chose. Your Claude Code, Codex and Groq get your text with contact details
-redacted; with your own Anthropic API key, it goes to Anthropic's API as is. The one exception is when you ask your
-own Claude or ChatGPT to fill a form: it then gets the answers it's typing in.
-
-## Notes and credits
-
-* LinkedIn's terms restrict automated access; its search is small and slow on purpose (`sources.linkedin.enabled:
-  false` turns it off). Indeed goes through the open-source `python-jobspy`.
-* Jake's Resume LaTeX template by Jake Gutierrez (MIT), based on sb2nov/resume. The LaTeX export was inspired by
-  Martin Sit's [makeitjakes](https://github.com/martin226/makeitjakes) (MIT).
+Jake's Resume LaTeX template by Jake Gutierrez (MIT). The LaTeX export was inspired by Martin Sit's
+[makeitjakes](https://github.com/martin226/makeitjakes). LinkedIn search is off-switchable (`sources.linkedin.enabled: false`);
+Indeed goes through `python-jobspy`.
 
 ## License
 
