@@ -22,7 +22,7 @@
 ![Tests](https://img.shields.io/badge/tests-1%2C719%20passing-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
-[Film](#-the-film) • [Features](#-what-it-does) • [How it works](#how-it-works) • [Try it](#-try-it-in-one-command)
+[Film](#-the-film) • [Features](#-what-it-does) • [Under the hood](#-under-the-hood) • [Try it](#-try-it-in-one-command)
 
 </div>
 
@@ -36,16 +36,14 @@ https://github.com/user-attachments/assets/b756de94-84a5-49fe-9bc4-72d0b98ada6f
 
 ## The problem
 
-Co-op students send hundreds of applications into postings with hundreds of applicants each. Most of that work is
-the same: find the postings you're actually allowed to apply to, rewrite the same answers, chase the inbox, forget to
-prep. Everyone does it the same way, so everyone gets lost in the same pile.
+Co-op students send hundreds of applications into postings with hundreds of applicants each, rewriting the same
+answers and chasing the same inbox. Everyone does it the same way, so everyone gets lost in the same pile.
 
 ## The fix
 
 **Co-op Coach does the search and the paperwork, and leaves the decisions to you.** It watches 4,700+ company career
 sites, ranks every posting against your résumé (including whether you can even apply), prepares the best ones each
-morning, reads your recruiting email to move your tracker, and puts the interview on your calendar. Then it helps you
-get ready for it.
+morning, reads your recruiting email to move your tracker, and helps you prep for the interview.
 
 <table>
 <tr>
@@ -80,8 +78,22 @@ get ready for it.
 **Works where you already are:** a Claude Code plugin (`/coop-coach:apply Shopify`), an MCP server, and a Chrome
 extension that fills the form on the page you're on, then stops before Submit.
 
+## ⚡ Try it in one command
+
+```bash
+git clone https://github.com/gkhurana21/co-op-coach.git && cd co-op-coach
+./run.sh demo
+```
+
+Open <http://127.0.0.1:8790> for a demo student with real postings and applications at every stage. No account, AI
+or network needed. On Windows, double-click `run-demo.bat`.
+
+## 🔧 Under the hood
+
 <details>
-<summary><b>Every feature, in detail</b></summary>
+<summary><b>Architecture, principles, engineering, setup and every feature in detail</b></summary>
+
+### Every feature, in detail
 
 | | |
 |---|---|
@@ -96,20 +108,7 @@ extension that fills the form on the page you're on, then stops before Submit.
 | ![Events](docs/screenshots/events-month.png) | **Events.** Info sessions, career fairs, networking and hackathons from 31 universities in Canada and the US (Stanford, MIT, Cornell, Waterloo, Western, SFU...), Toronto organizers, Luma, Meetup, Eventbrite, MLH and Devpost. List, month and hackathon-season views, and one private calendar link for Apple, Google or Outlook. |
 | ![Chat](docs/screenshots/chat.png) | **Jarvis, a chat that acts.** Jarvis (the little terminal from gkhurana's site) thinks while it works, writes its replies as you watch, cheers when you apply, and takes 🎤 voice. "Prepare my top 3", "research Ramp before my interview", "remind me Friday to follow up", "draft a referral ask", "how's my NeetCode?", "I solved Two Sum in 12 minutes", "what does the Forward Deployed market ask for?", "which smaller quant firms am I missing?", "who was the recruiter from RBC?", or paste a recruiter email. 62 tools, each step shown, with Undo. While the app is open, Jarvis's tools are answered by the running app itself, so a reply that uses two tools takes seconds. |
 
-</details>
-
-## ⚡ Try it in one command
-
-```bash
-git clone https://github.com/gkhurana21/co-op-coach.git && cd co-op-coach
-./run.sh demo
-```
-
-Then open <http://127.0.0.1:8790>. On Windows, double-click `run-demo.bat`. The demo is a fictional student (Alex
-Chen) with 250 real postings, 85 events, applications at every stage and a résumé with a few planted mistakes. No
-account, no AI and no network needed; it lives in its own `data-demo/` folder.
-
-## How it works
+### How it works
 
 ```mermaid
 flowchart LR
@@ -141,19 +140,19 @@ flowchart LR
 * **One crawler for everyone.** GitHub Actions reads every board three times a day into a shared Supabase feed; each app pulls only what changed, in seconds.
 * **Your own AI, no API key.** A signed-in Claude Code or Codex runs headless with only Co-op Coach's tools. Groq is the free fallback. Contact details are redacted first.
 
-## Principles
+### Principles
 
 * **You press Submit.** Forms get filled; a hook in the Claude Code plugin blocks Submit too.
 * **No CAPTCHAs, no account creation, no invented facts.** Anything only you know becomes a `[blank]`.
 * **Your data stays yours.** Everything lives on your Mac (or your own Supabase); secrets stay in the Keychain.
 
-## Engineering
+### Engineering
 
 * **1,719 checks in 64 suites**, each in its own process, with fakes for Claude Code, Codex, Groq, Workday and the university calendars, so they run offline. CI runs ruff and every suite on each push.
 * **Real-browser proof:** `tools/walkthrough.py` clicks through every feature, `tools/audit_ui.py` presses every safe button at desktop and phone sizes, and `tools/live_forms.py` tests the form filler on real pages with sending blocked.
 * **The film** is the real app, recorded by `tools/record_film.py` and cut by `tools/cut_film.py`.
 
-## Run it for real
+### Run it for real
 
 ```bash
 ./run.sh    # sets everything up, then http://127.0.0.1:8765
@@ -162,11 +161,13 @@ flowchart LR
 Needs a Mac with Python 3.10+, Chrome and git. Inbox, AI engines, Supabase, alerts and privacy details are in
 [docs/SETUP.md](docs/SETUP.md).
 
-## Credits
+### Credits
 
 Jake's Resume LaTeX template by Jake Gutierrez (MIT). The LaTeX export was inspired by Martin Sit's
 [makeitjakes](https://github.com/martin226/makeitjakes). LinkedIn search is off-switchable (`sources.linkedin.enabled: false`);
 Indeed goes through `python-jobspy`.
+
+</details>
 
 ## License
 
