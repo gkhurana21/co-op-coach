@@ -9,7 +9,9 @@ It never presses Submit, never solves a CAPTCHA, and every change an AI makes ha
 
 ## Watch the film
 
-![273: the Co-op Coach film](docs/film-273-poster.jpg)
+[![273: watch the Co-op Coach film](docs/film-273-poster.jpg)](https://youtu.be/PQf5qarSaas)
+
+▶ **[Watch it on YouTube](https://youtu.be/PQf5qarSaas)** (2:24)
 
 *273.* Every tech internship gets about 273 applications, and to a recruiter they all look the same. Two and a half
 minutes on how Alex, a first-year at Waterloo, stops applying like everyone else. Every screen is the real app.
