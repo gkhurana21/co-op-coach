@@ -156,7 +156,7 @@ def log_email(pid: int, text: str, company: str = "", role: str = "", status: st
     status = status if status in STATUSES else (r["status"] or "applied")
     if not company:
         return {"error": "couldn't tell which company this email is from: ask the student, then call log_email again "
-                         "with company=", "status": status, "role": role}
+                         "with company=", "need": "company", "status": status, "role": role}
     eid = mail._event_id(pid, "pasted:" + hashlib.sha1(text.encode()).hexdigest()[:16])
     before = {a["job_id"]: a for a in db.rows("SELECT * FROM applications WHERE profile_id=?", (pid,))}
     job_id = mail.match_by_req(pid, r["req_ids"], company) or mail.match_application(pid, company, role)

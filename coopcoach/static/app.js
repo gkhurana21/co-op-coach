@@ -891,12 +891,22 @@ async function renderTracker() {
   drawApps();
   $("#add-manual").addEventListener("click", () => $("#manual-form").classList.toggle("hidden"));
   $("#paste-email").addEventListener("click", () => { $("#email-form").classList.toggle("hidden"); $("#e-text").focus(); });
+  $("#e-text").addEventListener("input", () => { if ($("#e-company")) $("#e-out").innerHTML = ""; });  // a new email: ask again
   $("#email-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = $("#e-text").value.trim();
     if (!text) return;
+    const company = ($("#e-company")?.value || "").trim();
+    if ($("#e-company") && !company) { $("#e-company").focus(); return; }
     try {
-      const r = await api("/api/applications/from-email", { method: "POST", json: { profile_id: S.pid, text } });
+      const r = await api("/api/applications/from-email", { method: "POST", json: { profile_id: S.pid, text, company } });
+      if (r.need === "company") {  // the email doesn't say who it's from: ask here, then send it again with the name
+        $("#e-out").innerHTML = `<div class="row"><span class="small">${esc(r.message)}</span>
+          <input type="text" id="e-company" placeholder="Company, e.g. Northwind Robotics" style="flex:1">
+          <button class="btn btn-sm">Track it</button></div>`;
+        $("#e-company").focus();
+        return;
+      }
       await loadState(); await renderTracker();
       $("#email-form").classList.remove("hidden");
       $("#e-out").innerHTML = `<div class="small"><b>${esc(r.application)}</b> → ${esc(STATUS_LABEL[r.status] || r.status)}${r.status_changed ? ` (was ${esc(STATUS_LABEL[r.was] || r.was)})` : r.already_logged ? " (you pasted this one before)" : ""}</div>

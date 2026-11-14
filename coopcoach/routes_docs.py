@@ -744,7 +744,13 @@ def _rules_reply(pid: int, msg: str) -> str:
 def application_from_email(body: dict = Body(...)):
     """Applications → Paste an email: the same as pasting it into the chat (rules only, nothing sent anywhere)."""
     from . import agent
-    out = agent.call(body["profile_id"], "log_email", {"text": body.get("text") or ""}, source="app")
+    args = {"text": body.get("text") or ""}
+    if (body.get("company") or "").strip():
+        args["company"] = body["company"].strip()
+    out = agent.call(body["profile_id"], "log_email", args, source="app")
+    if out.get("need") == "company":  # the tool's wording is for an AI agent; the form asks the student itself
+        return {"need": "company", "message": "Couldn't tell which company this is from. Which company?",
+                "role": out.get("role") or "", "status": out.get("status") or ""}
     if out.get("error"):
         raise HTTPException(400, out["error"])
     return out

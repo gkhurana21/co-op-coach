@@ -152,6 +152,21 @@ def main():
         {"log_email", "set_dates"} <= set(agent.GROQ_TOOLS) and "forget_email" not in agent.CHAT_TOOLS
 
     from coopcoach import routes_docs
+    unsigned = ("Hi Alex,\n\nThanks for applying to the Software Engineering Intern role. We'd love to move you to the next "
+                "step: a 30-minute intro call.\n\nBook here: https://calendly.com/x/intro\n\nBest,\nPriya\n"
+                "Northwind Robotics Recruiting")
+    tool = agent.call(pid, "log_email", {"text": unsigned})
+    checks["the tool still tells an agent to call log_email again with company="] = tool.get("need") == "company" and \
+        "log_email again with company=" in tool.get("error", "")
+    form = routes_docs.application_from_email({"profile_id": pid, "text": unsigned})
+    checks["Paste an email asks the student which company, in plain words"] = form.get("need") == "company" and \
+        form["message"] == "Couldn't tell which company this is from. Which company?" and "log_email" not in str(form)
+    named = routes_docs.application_from_email({"profile_id": pid, "text": unsigned, "company": "Northwind Robotics"})
+    a = db.row("SELECT * FROM applications WHERE profile_id=? AND job_id=?", (pid, named.get("job_id")))
+    checks["...and sending it again with the company tracks it there"] = a and a["company"] == "Northwind Robotics" and \
+        a["status"] == "interviewing"
+    agent.call(pid, "forget_email", named["_undo"]["args"])
+
     rules = routes_docs._pasted_email(pid, CONFIRMED)
     checks["without an AI engine the chat still tracks a pasted email"] = rules and "Shopify" in rules["reply"] and \
         rules["cards"][0]["type"] == "email" and rules["undo"]
