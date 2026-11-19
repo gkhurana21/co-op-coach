@@ -699,8 +699,8 @@ def _save_feed(feed: dict, got, err: str | None, now: int, status: dict) -> int:
     return new
 
 
-def _dedupe_key(e: dict) -> tuple:
-    return re.sub(r"[^a-z0-9]", "", (e["title"] or "").lower())[:40], (e["start_ts"] or 0) // 3600
+def _dedupe_key(e: dict) -> str:
+    return re.sub(r"[^a-z0-9]", "", (e["title"] or "").lower())[:40]
 
 
 def for_person(pid: int, days: int = 90) -> list[dict]:
@@ -713,14 +713,14 @@ def for_person(pid: int, days: int = 90) -> list[dict]:
         " WHERE a.profile_id=?", (pid,)) if r["company"]}
     names = {n for n in names if n and len(n) >= 3}
     rx = re.compile(r"\b(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")\b", re.I) if names else None
-    seen: dict[tuple, dict] = {}
+    seen: dict[str, list[dict]] = {}
     out = []
     for e in upcoming(days):
         if JUNK_RE.search(e["title"] or ""):
             continue
         k = _dedupe_key(e)
-        if k in seen:  # same event listed by two sources
-            first = seen[k]
+        first = next((f for f in seen.get(k, []) if abs((f["start_ts"] or 0) - (e["start_ts"] or 0)) < 3600), None)
+        if first:  # same event listed by two sources (same title, starting within the hour)
             if e["feed_label"] and e["feed_label"] not in first["also"] and e["feed_label"] != first["feed_label"]:
                 first["also"].append(e["feed_label"])
             first["mark"] = first["mark"] or marks.get(e["id"])
@@ -730,7 +730,7 @@ def for_person(pid: int, days: int = 90) -> list[dict]:
         m = rx.search(f"{e['title']} {(e['description'] or '')[:600]}") if rx else None
         e["company"] = m.group(1) if m else ""
         e["description"] = (e["description"] or "")[:600]
-        seen[k] = e
+        seen.setdefault(k, []).append(e)
         out.append(e)
     return out
 

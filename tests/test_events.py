@@ -60,6 +60,15 @@ def main():
     checks["the same event from two sources shows once, with 'also on'"] = (
         sum("RBC Tech Info Session" in t for t in titles) == 1 and evs[0]["also"] == ["Eventbrite · Toronto tech"])
     checks["an event mentioning a company you follow is flagged"] = evs[0]["company"] == "RBC"
+    hour = (now // 3600 + 48) * 3600  # two listings a minute apart, either side of the hour, still merge
+    with db.tx() as c:
+        for eid, fid, ts in (("d1", 1, hour - 30), ("d2", 2, hour + 30), ("d3", 1, hour + 7 * 86400)):
+            c.execute("INSERT INTO events (id, feed_id, title, start_ts, location, url, description, kind, first_seen,"
+                      " last_seen, region) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                      (eid, fid, "Shopify Coffee Chat", ts, "Online", f"https://e/{eid}", "", "networking", now, now, "Online"))
+    chats = [e for e in events.for_person(pid) if e["title"] == "Shopify Coffee Chat"]
+    checks["listings either side of the hour merge; the same title a week later stays separate"] = (
+        len(chats) == 2 and chats[0]["also"] == ["Eventbrite · Toronto tech"])
     checks["get-rich-quick noise is filtered out"] = not any("Passive Income" in t for t in titles)
     checks["your ✅ going mark comes back"] = next(e for e in evs if e["id"] == "c1")["mark"] == "going"
     ics = events.ics_for([e for e in evs if e["mark"]])

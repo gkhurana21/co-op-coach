@@ -7,7 +7,7 @@ from . import db
 
 MODES = ("lean", "all")
 # what lean leaves out, by name (the page reads these too)
-LEAN_HIDES = ("people", "hackathons", "excel")  # tracks and events: shown to everyone (the owner uses them daily)
+LEAN_HIDES = ("people", "hackathons", "excel")  # tracks and events are shown to everyone
 # the chat's tools for those, so Jarvis doesn't offer what the app isn't showing
 TOOLS_OF = {
     "people": ("recruiters", "draft_message"),

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Co-op Coach",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Today, application form filling and inbox reading beside your browser. Requires the local Co-op Coach app.",
   "minimum_chrome_version": "116",
   "permissions": [

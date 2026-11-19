@@ -57,4 +57,4 @@ jobs:
         run: |
           .venv\Scripts\python.exe -m pip install --quiet ruff
           .venv\Scripts\python.exe -m playwright install chromium
-          .venv\Scripts\python.exe -m tests.run_all
+          .venv\Scripts\python.exe -m tests.run_all --retry

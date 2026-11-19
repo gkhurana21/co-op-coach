@@ -20,7 +20,7 @@
       internships already arrive via SimplifyJobs/LinkedIn/Indeed, so this is about speed and descriptions.
 - [ ] Windows support (start script + a few Mac-only bits), then test on a real Windows laptop.
 - [ ] **Path rewards** (for a paid plan, later): badges worth sharing, a weekly league with friends.
-- [ ] **Shared feed for everyone**: run `central.publish_sql()` once the owner decides to open the feed (read-only
+- [ ] **Shared feed for everyone**: run `central.publish_sql()` to open the feed to other people's apps (read-only
       postings and boards), ship the project URL and publishable key in config, and push boards people add to the
       feed so the crawler reads them for everyone. Events and hackathons could move to the feed too.
 - [ ] Hackathon application deadlines: MLH and Devpost don't publish them; learn them from each site, or let the

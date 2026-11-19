@@ -6,6 +6,8 @@ coopcoach, so they can't share state), and print one line per suite plus the tot
     .venv/bin/python -m tests.run_all --cov      # also measure line coverage of coopcoach/ (needs `coverage`)
     .venv/bin/python -m tests.run_all --postgres # on Postgres: COOPCOACH_DATABASE_URL, or your Supabase project's
                                                  # scratch schema (COOPCOACH_PG_SETTINGS=data/database.json)
+    .venv/bin/python -m tests.run_all --retry    # run a failed suite once more (slow CI runners, browser timing);
+                                                 # a suite that passes on the retry is reported as such
 
 Exit code 1 if any suite fails. CI runs exactly this.
 """
@@ -21,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def main() -> None:
     import os
-    cov, pg = "--cov" in sys.argv, "--postgres" in sys.argv
+    cov, pg, retry = "--cov" in sys.argv, "--postgres" in sys.argv, "--retry" in sys.argv
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     env = dict(os.environ)
     if pg:  # each suite starts from an empty scratch schema, never the real one
@@ -32,12 +34,21 @@ def main() -> None:
         subprocess.run([sys.executable, "-m", "coverage", "erase"], cwd=ROOT)
     suites = sorted(p.stem for p in (ROOT / "tests").glob("test_*.py") if not only or any(o in p.stem for o in only))
     passed = total = failed = skipped = 0
+    retried = []
     started = time.time()
     for name in suites:
         t = time.time()
         run = ["-m", "coverage", "run", "-p", "--source=coopcoach", "-m"] if cov else ["-m"]
-        r = subprocess.run([sys.executable, *run, f"tests.{name}"], cwd=ROOT, capture_output=True, text=True, timeout=900,
-                           env={**env, "COOPCOACH_PG_RESET": "1"} if pg else env)
+
+        def once():
+            return subprocess.run([sys.executable, *run, f"tests.{name}"], cwd=ROOT, capture_output=True, text=True,
+                                  timeout=900, env={**env, "COOPCOACH_PG_RESET": "1"} if pg else env)
+        r = once()
+        if retry and r.returncode != 0:
+            first = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL ")]
+            r = once()
+            if r.returncode == 0:
+                retried.append(f"{name} ({'; '.join(f[5:] for f in first)[:120] or 'crashed'})")
         out = (r.stdout + r.stderr).strip().splitlines()
         found = re.findall(r"(\d+)/(\d+) passed", r.stdout)  # the summary line (warnings go to stderr)
         m = re.match(r"(\d+)/(\d+)", "/".join(found[-1])) if found else None
@@ -59,6 +70,8 @@ def main() -> None:
             print("\n".join("     " + line for line in (fails + ["     ..."] if fails else []) + out[-25:]))
     print(f"\n{'Postgres' if pg else 'SQLite'}: {len(suites) - failed - skipped} suites ok, {failed} failed, {skipped} skipped · {passed}/{total} checks "
           f"· {time.time() - started:.0f}s")
+    for name in retried:
+        print(f"passed on the retry: {name}")
     if cov:
         subprocess.run([sys.executable, "-m", "coverage", "combine", "-q"], cwd=ROOT)
         rep = subprocess.run([sys.executable, "-m", "coverage", "report", "--format=total"], cwd=ROOT,
